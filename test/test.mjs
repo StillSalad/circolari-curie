@@ -106,3 +106,23 @@ assert.equal(relevance(acc, { classe: '2ASA' }), 'altri');
 const generica = classify({ title: 'AscoltaMI servizio psicologico', text: 'Agli studenti e alle famiglie', tipologie: ['Circolari per alunni e famiglie'], date: '2026-10-16' });
 assert.equal(generica.targets.all, true);
 console.log('✓ caso reale circolare 77');
+
+// Avvisi della sera e calendario
+import { eveningPayloads } from '../lib/evening.mjs';
+import { buildIcs } from '../lib/ics.mjs';
+const sera = [
+  { id: 'a', n: 68, title: 'Viaggio ad Atene', deadline: '2026-10-30', when: null, targets: { years: [4] }, level: 'urgente' },
+  { id: 'b', n: 79, title: 'Sciopero', deadline: null, when: '2026-10-30', targets: { all: true }, level: 'urgente' },
+  { id: 'c', n: 77, title: 'Corso prime', deadline: '2026-10-30', when: null, targets: { years: [1] }, level: 'normale' },
+];
+const solo = eveningPayloads(sera, { classe: '4ASA', promemoria: true }, '2026-10-30');
+assert.equal(solo.length, 1);
+assert.equal(solo[0].title, 'Domani scade');
+const riep = eveningPayloads(sera, { classe: '4ASA', riepilogo: true, promemoria: true }, '2026-10-30');
+assert.equal(riep.length, 1);
+assert.ok(riep[0].body.includes('Sciopero') && riep[0].body.includes('Scade: Viaggio ad Atene'));
+assert.equal(eveningPayloads(sera, { classe: '2ASA', riepilogo: true }, '2026-10-29').length, 0);
+assert.equal(eveningPayloads(sera, { classe: '4ASA' }, '2026-10-30').length, 0, 'nessun avviso se non richiesto');
+const ics = buildIcs({ id: 'a', n: 68, title: 'Viaggio ad Atene, info', deadline: '2026-10-30', url: 'https://x' }, 'scadenza');
+assert.ok(ics.includes('DTSTART;VALUE=DATE:20261030') && ics.includes('DTEND;VALUE=DATE:20261031') && ics.includes('Atene\\, info'));
+console.log('✓ avvisi della sera e calendario');

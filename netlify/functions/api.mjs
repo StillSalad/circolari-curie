@@ -3,6 +3,7 @@ import { loadIndex, saveSubscription, deleteSubscription, getSubscription } from
 import { runCheck } from '../../lib/core.mjs';
 import { send, vapidKeys } from '../../lib/push.mjs';
 import { SITE } from '../../lib/source.mjs';
+import { buildIcs } from '../../lib/ics.mjs';
 
 const json = (data, status = 200, extra = {}) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...extra } });
@@ -18,6 +19,8 @@ function cleanProfile(p = {}) {
     interessi: Array.isArray(p.interessi) ? p.interessi.filter((x) => typeof x === 'string').slice(0, 12) : [],
     includiForse: p.includiForse !== false,
     mostraDocenti: Boolean(p.mostraDocenti),
+    promemoria: Boolean(p.promemoria),
+    riepilogo: Boolean(p.riepilogo),
   };
 }
 
@@ -66,6 +69,20 @@ export default async (req) => {
         url: '/',
       });
       return json(r, r.ok ? 200 : 502);
+    }
+
+    if (route === 'ics' && req.method === 'GET') {
+      // Evento da aggiungere al calendario (iPhone lo apre direttamente)
+      const index = await loadIndex();
+      const c = index.items.find((x) => x.id === url.searchParams.get('id'));
+      const tipo = url.searchParams.get('tipo') === 'scadenza' ? 'scadenza' : 'data';
+      if (!c || !(tipo === 'scadenza' ? c.deadline : c.when)) return json({ error: 'Questa circolare non ha una data da aggiungere.' }, 404);
+      return new Response(buildIcs(c, tipo), {
+        headers: {
+          'content-type': 'text/calendar; charset=utf-8',
+          'content-disposition': `inline; filename="circolare-${c.n}-${tipo}.ics"`,
+        },
+      });
     }
 
     if (route === 'pdf' && req.method === 'GET') {

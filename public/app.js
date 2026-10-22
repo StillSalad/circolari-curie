@@ -208,6 +208,7 @@ function openDetail(id) {
     <h2 id="d-title">${esc(c.title)}</h2>
     ${levelTxt && c.reasons?.length ? `<div class="why ${c.level}"><h3>${levelTxt}</h3><ul>${c.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul></div>` : ''}
     <div class="dates">${dates.map(([k, v]) => `<div><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>
+    ${calendarButtons(c)}
     ${c.summary ? `<p class="summary">${esc(c.summary)}</p>` : ''}
     ${c.excerpt ? `<p class="text-label">Dal testo della circolare</p><p class="text">${esc(c.excerpt)}</p>` : (!c.detailDone ? '<p class="text">Il testo completo arriva al prossimo controllo. Intanto puoi aprirla sul sito.</p>' : '')}
     <section class="wa" aria-labelledby="wa-title">
@@ -348,6 +349,101 @@ function openFromUrl(href = location.href) {
   if (id && state.items.some((c) => c.id === id)) openDetail(id);
 }
 
+/* ---------- Aggiungi al calendario ---------- */
+
+const ymd = (d) => d.replace(/-/g, '');
+function nextDay(d) { const x = asDate(d); x.setDate(x.getDate() + 1); return x.toISOString().slice(0, 10); }
+
+function calendarButtons(c) {
+  const rows = [];
+  if (c.when) rows.push(['data', c.deadline ? 'Aggiungi la data al calendario' : 'Aggiungi al calendario']);
+  if (c.deadline) rows.push(['scadenza', 'Aggiungi la scadenza al calendario']);
+  if (!rows.length) return '';
+  const extra = !isIOS ? `<a class="link-btn" href="/api/ics?id=${encodeURIComponent(c.id)}&tipo=${c.deadline ? 'scadenza' : 'data'}">Scarica il file per Outlook o Samsung Calendar</a>` : '';
+  return `<div class="cal">${rows.map(([kind, label]) =>
+    `<button class="secondary cal-btn" data-cal="${esc(c.id)}" data-kind="${kind}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4M12 13v5M9.5 15.5h5"/></svg>${esc(label)}</button>`).join('')}${extra}</div>`;
+}
+
+function addToCalendar(id, kind) {
+  const c = state.items.find((x) => x.id === id);
+  if (!c) return;
+  if (isIOS) { location.href = `/api/ics?id=${encodeURIComponent(id)}&tipo=${kind}`; return; }
+  const day = kind === 'scadenza' ? c.deadline : c.when;
+  const text = kind === 'scadenza' ? `Scadenza: ${c.title}` : c.title;
+  const details = `Circolare n. ${c.n}\n${shortText(c, 500)}\n\n${c.url}`;
+  const url = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+    + `&text=${encodeURIComponent(text)}&dates=${ymd(day)}/${ymd(nextDay(day))}&details=${encodeURIComponent(details)}`;
+  window.open(url, '_blank', 'noopener');
+}
+
+/* ---------- Tutorial iniziale ---------- */
+
+let tourStep = 0;
+const tourSteps = () => [...document.querySelectorAll('#tour .step')];
+
+function openTour() {
+  const p = state.profile || {};
+  const f = $('#tour-form');
+  const cls = normClass(p.classe);
+  f.querySelectorAll('[name=t-anno]').forEach((r) => { r.checked = r.value === cls[0]; });
+  f['t-sezione'].value = cls.slice(1);
+  f['t-indirizzo'].value = p.indirizzo || '';
+  f['t-promemoria'].checked = Boolean(p.promemoria);
+  f['t-riepilogo'].checked = Boolean(p.riepilogo);
+  tourStep = 0;
+  showTourStep();
+  renderNotifyBox();
+  if (!$('#tour').open) $('#tour').showModal();
+}
+
+function showTourStep() {
+  const steps = tourSteps();
+  steps.forEach((el, i) => { el.hidden = i !== tourStep; });
+  $('#tour-progress').textContent = `${tourStep + 1} di ${steps.length}`;
+  $('#tour-back').hidden = tourStep === 0;
+  $('#tour-next').textContent = tourStep === steps.length - 1 ? 'Inizia' : 'Avanti';
+  $('#tour-skip').hidden = !state.profile;
+  steps[tourStep].querySelector('h2')?.focus();
+}
+
+function saveTourClass() {
+  const f = $('#tour-form');
+  const anno = f.querySelector('[name=t-anno]:checked')?.value || '';
+  const classe = normClass(anno + f['t-sezione'].value);
+  if (!/^[1-5][A-Z]{1,4}$/.test(classe)) { toast('Scegli l’anno e scrivi la sezione, es. 2 e ASA'); return false; }
+  state.profile = { soglia: 'normale', interessi: [], includiForse: true, ...(state.profile || {}), classe, indirizzo: f['t-indirizzo'].value || undefined };
+  store.set('cc-profile', state.profile);
+  return true;
+}
+
+function saveTourExtras() {
+  const f = $('#tour-form');
+  state.profile = { ...state.profile, promemoria: f['t-promemoria'].checked, riepilogo: f['t-riepilogo'].checked };
+  store.set('cc-profile', state.profile);
+  syncSubscription().catch(() => {});
+}
+
+function finishTour() {
+  store.set('cc-tour', true);
+  $('#tour').close();
+  render();
+  openFromUrl();
+}
+
+$('#tour-next').addEventListener('click', () => {
+  const step = tourSteps()[tourStep];
+  if (step.dataset.step === 'classe' && !saveTourClass()) return;
+  if (step.dataset.step === 'notifiche') saveTourExtras();
+  if (tourStep === tourSteps().length - 1) return finishTour();
+  tourStep++;
+  showTourStep();
+});
+$('#tour-back').addEventListener('click', () => { tourStep = Math.max(0, tourStep - 1); showTourStep(); });
+$('#tour-skip').addEventListener('click', finishTour);
+$('#tour-form').addEventListener('change', (e) => { if (/t-(promemoria|riepilogo)/.test(e.target.name)) saveTourExtras(); });
+// Senza classe il tutorial non si può chiudere con Esc
+$('#tour').addEventListener('cancel', (e) => { if (!state.profile) e.preventDefault(); });
+
 /* ---------- Profilo ---------- */
 
 function buildInteressi() {
@@ -367,7 +463,8 @@ function fillProfileForm() {
   f.querySelectorAll('[name=interessi]').forEach((c) => { c.checked = (p.interessi || []).includes(c.value); });
   f.includiForse.checked = p.includiForse !== false;
   f.mostraDocenti.checked = Boolean(p.mostraDocenti);
-  $('#p-title').textContent = state.profile ? 'La tua classe' : 'Benvenuto in Circolari Curie';
+  f.promemoria.checked = Boolean(p.promemoria);
+  f.riepilogo.checked = Boolean(p.riepilogo);
   renderNotifyBox();
 }
 
@@ -382,6 +479,8 @@ function readProfileForm() {
     interessi: [...f.querySelectorAll('[name=interessi]:checked')].map((c) => c.value),
     includiForse: f.includiForse.checked,
     mostraDocenti: f.mostraDocenti.checked,
+    promemoria: f.promemoria.checked,
+    riepilogo: f.riepilogo.checked,
   };
 }
 
@@ -409,29 +508,26 @@ function b64ToBytes(b64) {
 }
 
 async function renderNotifyBox() {
-  const box = $('#notify-box');
+  let html;
   if (isIOS && !isStandalone) {
-    box.innerHTML = `<p>Su iPhone le notifiche funzionano solo dopo aver aggiunto l’app alla schermata Home:</p>
+    html = `<p>Su iPhone le notifiche funzionano solo dopo aver aggiunto l’app alla schermata Home:</p>
       <ol><li>Tocca il pulsante Condividi di Safari.</li><li>Scegli “Aggiungi alla schermata Home”.</li><li>Apri Circolari dalla Home e torna qui.</li></ol>`;
-    return;
-  }
-  if (!pushSupported) { box.innerHTML = '<p>Questo browser non supporta le notifiche push. Prova con Chrome o con l’app aggiunta alla schermata Home.</p>'; return; }
-  if (Notification.permission === 'denied') {
-    box.innerHTML = '<p>Le notifiche sono bloccate. Riattivale dalle impostazioni del browser per questo sito, poi torna qui.</p>';
-    return;
-  }
-  const sub = await currentSub().catch(() => null);
-  if (sub) {
-    box.innerHTML = `<p class="status">Notifiche attive su questo dispositivo.</p>
-      <p><button type="button" class="secondary" id="push-test">Invia una notifica di prova</button></p>
-      <p><button type="button" class="secondary" id="push-off">Disattiva notifiche</button></p>`;
-    $('#push-test').onclick = testPush;
-    $('#push-off').onclick = disablePush;
+  } else if (!pushSupported) {
+    html = '<p>Questo browser non supporta le notifiche push. Prova con Chrome o con l’app aggiunta alla schermata Home.</p>';
+  } else if (Notification.permission === 'denied') {
+    html = '<p>Le notifiche sono bloccate. Riattivale dalle impostazioni del browser per questo sito, poi torna qui.</p>';
+  } else if (await currentSub().catch(() => null)) {
+    html = `<p class="status">Notifiche attive su questo dispositivo.</p>
+      <p><button type="button" class="secondary" data-push="test">Invia una notifica di prova</button></p>
+      <p><button type="button" class="secondary" data-push="off">Disattiva notifiche</button></p>`;
   } else {
-    box.innerHTML = `<p>Ricevi un avviso quando esce una circolare per la tua classe.</p>
-      <p><button type="button" class="primary" id="push-on">Attiva notifiche</button></p>`;
-    $('#push-on').onclick = enablePush;
+    html = `<p>Ricevi un avviso quando esce una circolare per la tua classe.</p>
+      <p><button type="button" class="primary" data-push="on">Attiva notifiche</button></p>`;
   }
+  document.querySelectorAll('.notify-box').forEach((box) => {
+    // Nel tutorial i pulsanti di prova e disattivazione non servono
+    box.innerHTML = box.dataset.compact ? html.replace(/<p><button[^>]*data-push="(test|off)"[\s\S]*?<\/p>/g, '') : html;
+  });
 }
 
 async function syncSubscription(sub) {
@@ -439,12 +535,12 @@ async function syncSubscription(sub) {
   if (!s) return;
   await fetch('/api/subscribe', {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ subscription: s.toJSON(), profile: serverProfile(state.profile || readProfileForm()) }),
+    body: JSON.stringify({ subscription: s.toJSON(), profile: serverProfile(state.profile || {}) }),
   });
 }
 
-async function enablePush() {
-  const btn = $('#push-on'); if (btn) { btn.disabled = true; btn.textContent = 'Attivazione…'; }
+async function enablePush(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Attivazione…'; }
   try {
     const perm = await Notification.requestPermission();
     if (perm !== 'granted') throw new Error('Permesso non concesso: senza permesso non posso inviarti avvisi.');
@@ -453,7 +549,6 @@ async function enablePush() {
     if (!res.ok) throw new Error(data.error);
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(data.publicKey) });
-    if (!state.profile) { state.profile = readProfileForm(); store.set('cc-profile', state.profile); }
     await syncSubscription(sub);
     toast('Notifiche attivate');
   } catch (err) {
@@ -493,6 +588,14 @@ function setFilter(f) {
 }
 
 document.addEventListener('click', (e) => {
+  const push = e.target.closest('[data-push]');
+  if (push) {
+    if (push.dataset.push === 'on') return enablePush(push);
+    if (push.dataset.push === 'off') return disablePush();
+    if (push.dataset.push === 'test') return testPush();
+  }
+  const cal = e.target.closest('[data-cal]');
+  if (cal) return addToCalendar(cal.dataset.cal, cal.dataset.kind, cal.dataset.how);
   const item = e.target.closest('.item');
   if (item) return openDetail(item.dataset.id);
   const open = e.target.closest('[data-open]');
@@ -524,6 +627,8 @@ desktop.addEventListener('change', () => {
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && desktop.matches && $('#detail').open && !$('#profile').open) $('#detail').close();
 });
+
+$('#tour-again').addEventListener('click', () => { $('#profile').close(); openTour(); });
 
 $('#btn-profile').addEventListener('click', () => { fillProfileForm(); $('#profile').showModal(); });
 
@@ -559,4 +664,4 @@ const cached = store.get('cc-cache', null);
 if (cached) { state.items = cached.items; state.updatedAt = cached.updatedAt; }
 render();
 load();
-if (!state.profile) { fillProfileForm(); $('#profile').showModal(); }
+if (!state.profile || !store.get('cc-tour', false)) openTour();

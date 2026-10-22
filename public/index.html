@@ -107,6 +107,12 @@
       </fieldset>
 
       <fieldset>
+        <legend>Avvisi in più</legend>
+        <label class="row"><input type="checkbox" name="promemoria"> <span><b>Promemoria scadenze:</b> il giorno prima di una scadenza ti ricordo cosa consegnare</span></label>
+        <label class="row"><input type="checkbox" name="riepilogo"> <span><b>Riepilogo della sera:</b> alle 19, se domani cambia qualcosa (sciopero, uscite, assemblee), ti mando un riassunto</span></label>
+      </fieldset>
+
+      <fieldset>
         <legend>Avvisami sempre anche per</legend>
         <div class="chips" id="interessi"></div>
       </fieldset>
@@ -118,7 +124,82 @@
       </fieldset>
 
       <button class="primary" id="save-profile" type="submit">Salva</button>
+      <button class="link-btn tour-again" type="button" id="tour-again">Rivedi il tutorial</button>
       <p class="credits">App non ufficiale, non collegata al Liceo. Fa fede sempre il sito della scuola.</p>
+    </form>
+  </dialog>
+
+  <!-- Tutorial iniziale -->
+  <dialog class="sheet tour" id="tour" aria-label="Tutorial di Circolari Curie">
+    <form class="sheet-inner" id="tour-form" onsubmit="return false">
+      <div class="tour-top">
+        <span id="tour-progress" class="tour-progress"></span>
+        <button type="button" class="link-btn" id="tour-skip">Salta</button>
+      </div>
+
+      <section class="step" data-step="benvenuto">
+        <img class="tour-icon" src="/icons/icon-192.png" alt="" width="96" height="96">
+        <h2 tabindex="-1">Le circolari del Curie, senza cercarle</h2>
+        <p>Ogni 20 minuti controllo il sito della scuola. Quando esce una circolare ti dico se riguarda la tua classe, se è urgente e se c’è qualcosa da consegnare.</p>
+        <p class="hint">App non ufficiale: fa sempre fede il sito della scuola.</p>
+      </section>
+
+      <section class="step" data-step="classe" hidden>
+        <h2 tabindex="-1">In che classe sei?</h2>
+        <p class="hint">Serve a mostrarti prima le circolari che ti riguardano. Resta su questo dispositivo.</p>
+        <fieldset>
+          <legend>Anno</legend>
+          <div class="years">
+            <label><input type="radio" name="t-anno" value="1"><span>1^</span></label>
+            <label><input type="radio" name="t-anno" value="2"><span>2^</span></label>
+            <label><input type="radio" name="t-anno" value="3"><span>3^</span></label>
+            <label><input type="radio" name="t-anno" value="4"><span>4^</span></label>
+            <label><input type="radio" name="t-anno" value="5"><span>5^</span></label>
+          </div>
+        </fieldset>
+        <label class="field"><span>Sezione</span>
+          <input name="t-sezione" maxlength="5" placeholder="Come sul registro, es. A, B, CSA" autocapitalize="characters" autocomplete="off">
+        </label>
+        <label class="field"><span>Indirizzo</span>
+          <select name="t-indirizzo">
+            <option value="">Scegli</option>
+            <option value="scientifico">Scientifico</option>
+            <option value="scienze_applicate">Scienze applicate</option>
+            <option value="classico">Classico</option>
+            <option value="linguistico">Linguistico</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="step" data-step="notifiche" hidden>
+        <h2 tabindex="-1">Vuoi essere avvisato?</h2>
+        <div class="notify-box" data-compact="1"></div>
+        <fieldset>
+          <legend>Avvisi in più, se ti servono</legend>
+          <label class="row"><input type="checkbox" name="t-promemoria"> <span><b>Promemoria scadenze:</b> il giorno prima ti ricordo cosa consegnare</span></label>
+          <label class="row"><input type="checkbox" name="t-riepilogo"> <span><b>Riepilogo della sera:</b> alle 19, solo se domani cambia qualcosa</span></label>
+        </fieldset>
+        <p class="hint">Puoi cambiare tutto quando vuoi toccando la tua classe in alto a destra.</p>
+      </section>
+
+      <section class="step" data-step="uso" hidden>
+        <h2 tabindex="-1">Come si usa</h2>
+        <dl class="tips">
+          <dt>Per me, Importanti, Tutte</dt>
+          <dd>In alto scegli cosa vedere. “Per me” mostra solo le circolari della tua classe e quelle per tutta la scuola.</dd>
+          <dt>Rosso vuol dire urgente</dt>
+          <dd>Scioperi, uscite anticipate, scadenze vicine. Aprendo la circolare vedi il perché.</dd>
+          <dt>Inoltra alla classe</dt>
+          <dd>Dentro ogni circolare c’è il pulsante verde: manda su WhatsApp il PDF con un messaggio già scritto.</dd>
+          <dt>Aggiungi al calendario</dt>
+          <dd>Se la circolare ha una data o una scadenza, la metti nel calendario del telefono con un tocco.</dd>
+        </dl>
+      </section>
+
+      <div class="tour-nav">
+        <button type="button" class="secondary" id="tour-back">Indietro</button>
+        <button type="button" class="primary" id="tour-next">Avanti</button>
+      </div>
     </form>
   </dialog>
 
