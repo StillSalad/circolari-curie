@@ -234,6 +234,7 @@ function openDetail(id) {
   // Su computer il dettaglio sta a destra e l'elenco resta cliccabile
   if (dlg.open && dlg.matches(':modal') === desktop.matches) dlg.close();
   if (!dlg.open) desktop.matches ? dlg.show() : dlg.showModal();
+  document.body.classList.toggle('reading', desktop.matches);
   dlg.scrollTop = 0;
   history.replaceState(null, '', '?c=' + encodeURIComponent(id));
   render();
@@ -506,13 +507,14 @@ document.addEventListener('click', (e) => {
 $('#detail').addEventListener('close', () => {
   history.replaceState(null, '', location.pathname);
   state.openId = null;
+  document.body.classList.remove('reading');
   renderList();
 });
 
 // Passando da telefono a computer (o ruotando il tablet) il dettaglio cambia forma
 desktop.addEventListener('change', () => {
   const dlg = $('#detail');
-  if (!dlg.open || !state.openId) return;
+  if (!dlg.open || !state.openId) { document.body.classList.remove('reading'); return; }
   const id = state.openId;
   dlg.close();
   openDetail(id);
