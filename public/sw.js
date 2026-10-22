@@ -1,5 +1,5 @@
 // Service worker: app offline, ultime circolari in cache, notifiche push.
-const VERSION = 'cc-v9';
+const VERSION = 'cc-v10';
 const SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/match.js', '/manifest.webmanifest',
   '/icons/icon-192.png', '/icons/badge-96.png', '/img/logo-navy.png', '/img/logo-white.png'];
 
@@ -8,7 +8,7 @@ self.addEventListener('install', (e) => {
 });
 
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION && k !== 'cc-badge').map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
 self.addEventListener('fetch', (e) => {
@@ -36,9 +36,23 @@ self.addEventListener('fetch', (e) => {
   }));
 });
 
+// Numero sull'icona: l'app salva quante circolari non lette ci sono, qui aggiungiamo quella nuova
+async function bumpBadge(isNew) {
+  if (!isNew || !('setAppBadge' in self.navigator)) return;
+  try {
+    const cache = await caches.open('cc-badge');
+    const res = await cache.match('/badge');
+    const n = (res ? Number(await res.text()) : 0) + 1;
+    await cache.put('/badge', new Response(String(n)));
+    await self.navigator.setAppBadge(n);
+  } catch {}
+}
+
 self.addEventListener('push', (e) => {
   let data = {};
   try { data = e.data.json(); } catch { data = { title: 'Nuova circolare', body: e.data?.text() || '' }; }
+  const isNew = data.tag && !/^(admin|prova|riepilogo|scadenza)/.test(data.tag);
+  e.waitUntil(bumpBadge(isNew));
   e.waitUntil(self.registration.showNotification(data.title || 'Nuova circolare', {
     body: data.body || '',
     tag: data.tag,

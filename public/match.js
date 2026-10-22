@@ -39,7 +39,33 @@ export function profileYear(profile) {
  *  'altri'    -> nomina solo altre classi
  *  'docenti'  -> solo per docenti e personale
  */
+const RANK = { tua: 4, tutti: 3, forse: 2, altri: 1, docenti: 0 };
+
+/** Tutte le classi del profilo: la principale più quelle aggiunte (genitori, rappresentanti). */
+export function profileClasses(profile) {
+  const main = profile ? [profile] : [];
+  const extra = (profile?.altreClassi || []).map((k) => ({ ...profile, classe: k, indirizzo: undefined, altreClassi: [] }));
+  return [...main, ...extra];
+}
+
 export function relevance(c, profile) {
+  // Correzioni manuali dell'utente ("Non è per me" / "È per me")
+  if (profile?.nonPerMe?.includes(c.id)) return 'altri';
+  if (profile?.perMe?.includes(c.id)) return 'tua';
+  let best = null;
+  for (const p of profileClasses(profile)) {
+    const r = relevanceOne(c, p);
+    if (!best || RANK[r] > RANK[best]) best = r;
+  }
+  return best || relevanceOne(c, profile);
+}
+
+/** Per quale classe del profilo è "tua" (serve per l'etichetta). */
+export function matchingClass(c, profile) {
+  return profileClasses(profile).find((p) => relevanceOne(c, p) === 'tua')?.classe || null;
+}
+
+function relevanceOne(c, profile) {
   const t = c.targets || {};
   if (t.docentiOnly) return 'docenti';
 
@@ -83,8 +109,11 @@ export function targetLabel(c, profile) {
   const t = c.targets || {};
   if (r === 'docenti') return 'Docenti e personale';
   if (r === 'tua') {
-    const mine = normClass(profile?.classe);
-    if (mine && (t.classes || []).some((k) => k === mine || mine.startsWith(k))) return 'La tua classe';
+    const k = normClass(matchingClass(c, profile) || profile?.classe);
+    const main = normClass(profile?.classe);
+    if (profile?.perMe?.includes(c.id)) return 'Segnata come tua';
+    if (k && k !== main) return 'Classe ' + k;
+    if (k && (t.classes || []).some((x) => x === k || k.startsWith(x))) return 'La tua classe';
     return 'Il tuo anno';
   }
   if (r === 'tutti') return 'Tutta la scuola';

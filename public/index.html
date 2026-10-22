@@ -29,6 +29,7 @@
   </header>
 
   <main id="main">
+    <section class="install" id="install" hidden></section>
     <section class="today" id="today" aria-live="polite"></section>
 
     <div class="controls">
@@ -92,6 +93,11 @@
       </label>
 
       <label class="field">
+        <span>Altre classi <small>(per genitori o rappresentanti, es. 1B, 3ASA)</small></span>
+        <input name="altreClassi" id="altreClassi" maxlength="40" autocapitalize="characters" autocomplete="off">
+      </label>
+
+      <label class="field">
         <span>Nome <small>(facoltativo, solo per salutarti)</small></span>
         <input name="nome" id="nome" maxlength="30" autocomplete="given-name">
       </label>
@@ -125,6 +131,7 @@
 
       <button class="primary" id="save-profile" type="submit">Salva</button>
       <button class="link-btn tour-again" type="button" id="tour-again">Rivedi il tutorial</button>
+      <div id="admin-box" class="admin-box"></div>
       <p class="credits">App non ufficiale, non collegata al Liceo. Fa fede sempre il sito della scuola.</p>
     </form>
   </dialog>
@@ -193,6 +200,10 @@
           <dd>Dentro ogni circolare c’è il pulsante verde: manda su WhatsApp il PDF con un messaggio già scritto.</dd>
           <dt>Aggiungi al calendario</dt>
           <dd>Se la circolare ha una data o una scadenza, la metti nel calendario del telefono con un tocco.</dd>
+          <dt>Da fare</dt>
+          <dd>Le circolari che chiedono firme, moduli o pagamenti sono segnate “Da fare”. Quando hai finito, tocca “Segna come fatto”.</dd>
+          <dt>Classe sbagliata?</dt>
+          <dd>In fondo a ogni circolare puoi dire se riguarda o no la tua classe: si corregge subito e aiuta a migliorare l’app.</dd>
         </dl>
       </section>
 
@@ -201,6 +212,19 @@
         <button type="button" class="primary" id="tour-next">Avanti</button>
       </div>
     </form>
+  </dialog>
+
+  <!-- Istruzioni per installare su iPhone -->
+  <dialog class="sheet ios-install" id="ios-install" aria-labelledby="ios-title">
+    <div class="sheet-inner">
+      <button class="back" data-close>Chiudi</button>
+      <h2 id="ios-title" class="sheet-title">Installa su iPhone</h2>
+      <ol class="ios-steps">
+        <li><span class="ios-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3m0 0L8 7m4-4 4 4"/><path d="M7 10H5.5A1.5 1.5 0 0 0 4 11.5v8A1.5 1.5 0 0 0 5.5 21h13a1.5 1.5 0 0 0 1.5-1.5v-8a1.5 1.5 0 0 0-1.5-1.5H17"/></svg></span><div>Apri questa pagina in <b>Safari</b> e tocca <b>Condividi</b>, il quadrato con la freccia in basso al centro.</div></li>
+        <li><span class="ios-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M12 8.5v7M8.5 12h7"/></svg></span><div>Scorri e scegli <b>Aggiungi alla schermata Home</b>, poi tocca <b>Aggiungi</b>.</div></li>
+        <li><span class="ios-ico"><img src="/icons/icon-192.png" alt="" width="40" height="40"></span><div>Apri <b>Circolari</b> dalla schermata Home e attiva le notifiche dal profilo.</div></li>
+      </ol>
+    </div>
   </dialog>
 
   <template id="tpl-item">

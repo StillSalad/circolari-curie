@@ -126,3 +126,14 @@ assert.equal(eveningPayloads(sera, { classe: '4ASA' }, '2026-10-30').length, 0, 
 const ics = buildIcs({ id: 'a', n: 68, title: 'Viaggio ad Atene, info', deadline: '2026-10-30', url: 'https://x' }, 'scadenza');
 assert.ok(ics.includes('DTSTART;VALUE=DATE:20261030') && ics.includes('DTEND;VALUE=DATE:20261031') && ics.includes('Atene\\, info'));
 console.log('✓ avvisi della sera e calendario');
+
+// Più classi e correzioni manuali
+const genitore = { classe: '4ASA', altreClassi: ['1B'] };
+assert.equal(relevance(orient, genitore), 'tua');
+assert.equal(targetLabel(orient, genitore), 'Classe 1B');
+assert.equal(relevance(gita, genitore), 'tua');
+const conId = { ...orient, id: 'c77' };
+assert.equal(relevance(conId, { classe: '2ASA', perMe: ['c77'] }), 'tua');
+assert.equal(relevance(conId, { classe: '1B', nonPerMe: ['c77'] }), 'altri');
+assert.equal(shouldNotify({ ...conId, level: 'importante' }, { classe: '4A', altreClassi: ['1C'] }), true);
+console.log('✓ più classi e correzioni');

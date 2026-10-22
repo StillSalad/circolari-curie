@@ -194,6 +194,41 @@ main { max-width: 680px; margin: 0 auto; padding: 4px 18px 48px; }
 }
 .link-btn { margin-top: 10px; border: 0; background: none; padding: 4px 0; color: var(--blue); font-weight: 600; }
 
+/* Installa */
+.install {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px;
+  margin-top: 12px; padding: 14px 16px; border-radius: 14px; background: var(--navy); color: var(--paper);
+}
+.install strong { display: block; font: 600 19px/1.25 var(--serif); }
+.install span { font-size: 15px; opacity: .85; }
+.install-actions { display: flex; align-items: center; gap: 12px; }
+.install .primary { background: var(--paper); color: var(--navy); width: auto; padding: 9px 18px; }
+.install .link-btn { color: var(--paper); margin: 0; opacity: .85; }
+.ios-steps { list-style: none; padding: 0; margin: 20px 0 0; display: grid; gap: 18px; counter-reset: s; }
+.ios-steps li { display: grid; grid-template-columns: 52px 1fr; gap: 14px; align-items: center; font-size: 17px; }
+.ios-ico { width: 52px; height: 52px; border-radius: 14px; background: var(--mist); display: grid; place-items: center; }
+.ios-ico svg { width: 28px; height: 28px; fill: none; stroke: var(--blue); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ios-ico img { border-radius: 10px; }
+
+/* Da fare, segnalazioni, gestione */
+.tag.todo { background: var(--gold); color: var(--paper); }
+.todo-line { margin: 12px 0 0; }
+.todo-line button { all: unset; cursor: pointer; color: var(--gold); font-weight: 600; }
+.todo-line button:focus-visible { outline: 2.5px solid var(--blue); }
+.done-btn {
+  width: 100%; margin: 0 0 16px; padding: 12px 16px; border-radius: 12px; font-weight: 700;
+  border: 1.5px dashed var(--gold); background: transparent; color: var(--gold);
+}
+.done-btn.is-done { border-style: solid; background: var(--mist); color: var(--muted); border-color: var(--line); }
+.report { text-align: center; margin: 18px 0 0; }
+.admin-box { margin-top: 26px; }
+.admin { background: var(--mist); border-radius: 12px; padding: 12px 14px; font-size: 15px; }
+.admin p { margin: 0 0 8px; }
+.admin h4 { margin: 14px 0 6px; }
+.reports { margin: 0; padding-left: 18px; max-height: 300px; overflow: auto; }
+.reports li { margin-bottom: 8px; }
+.reports span { color: var(--muted); }
+
 /* Calendario */
 .cal { display: grid; gap: 8px; margin: 0 0 16px; }
 .cal-btn { display: flex; align-items: center; justify-content: center; gap: 8px; }
@@ -301,7 +336,7 @@ legend { font-weight: 700; margin-bottom: 8px; padding: 0; }
   .wa-preview pre { max-height: none; }
 
   /* Profilo come finestra al centro */
-  #profile, #tour {
+  #profile, #tour, #ios-install {
     width: min(620px, 100vw - 48px); height: auto; max-height: calc(100vh - 64px);
     margin: auto; border-radius: 18px; overflow: auto;
   }

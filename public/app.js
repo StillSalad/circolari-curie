@@ -9,6 +9,7 @@ const store = {
 const state = {
   profile: store.get('cc-profile', null),
   read: new Set(store.get('cc-letti', [])),
+  done: new Set(store.get('cc-fatti', [])),
   items: [],
   updatedAt: null,
   filter: 'mine',
@@ -24,6 +25,12 @@ const fmtLong = new Intl.DateTimeFormat('it-IT', { weekday: 'long', day: 'numeri
 const fmtTime = new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' });
 const asDate = (s) => (s ? new Date(s + 'T12:00:00') : null);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Da leggere: solo le circolari recenti, non quelle recuperate dall'archivio
+const isUnread = (c) => !state.read.has(c.id) && !c.archived && (daysFrom(c.date) ?? 0) >= -14;
+// Da fare: ha una scadenza o chiede firme, moduli, pagamenti
+const needsAction = (c) => Boolean(c.deadline) || (c.reasons || []).some((r) => /firma|modulo|pagamento/i.test(r));
+const isTodo = (c) => needsAction(c) && !state.done.has(c.id) && (!c.deadline || daysFrom(c.deadline) >= 0);
 
 function daysFrom(dateStr) {
   const d = asDate(dateStr); if (!d) return null;
@@ -88,8 +95,9 @@ function renderToday() {
   const p = state.profile || {};
   const cls = normClass(p.classe);
   const mine = state.items.filter((c) => isForMe(c, p));
-  const urgent = mine.filter((c) => c.level === 'urgente' && !state.read.has(c.id));
-  const unread = mine.filter((c) => !state.read.has(c.id));
+  const urgent = mine.filter((c) => c.level === 'urgente' && isUnread(c));
+  const unread = mine.filter(isUnread);
+  const todo = mine.filter(isTodo);
   const hello = p.nome ? `Ciao ${esc(p.nome)}. ` : '';
 
   let h1;
@@ -104,8 +112,13 @@ function renderToday() {
   const alerts = urgent.slice(0, 2).map((c) => `
     <div class="alert"><button data-open="${esc(c.id)}">n. ${esc(c.n)}: ${esc(c.title)}</button></div>`).join('');
 
-  $('#today').innerHTML = `<h1>${h1}</h1><p>${sub}</p>${state.error ? `<p>${esc(state.error)}</p>` : ''}${alerts}`;
-  $('#class-pill').textContent = cls || 'Classe';
+  const todoLine = todo.length
+    ? `<p class="todo-line"><button data-open="${esc(todo[0].id)}">${todo.length === 1 ? 'Hai 1 cosa da fare' : `Hai ${todo.length} cose da fare`}: ${esc(todo[0].title)}${todo.length > 1 ? ' e altre' : ''}</button></p>`
+    : '';
+  $('#today').innerHTML = `<h1>${h1}</h1><p>${sub}</p>${state.error ? `<p>${esc(state.error)}</p>` : ''}${alerts}${todoLine}`;
+  const extra = (p.altreClassi || []).length;
+  $('#class-pill').textContent = (cls || 'Classe') + (extra ? ` +${extra}` : '');
+  updateBadge(unread.length);
 }
 
 function groupName(dateStr) {
@@ -152,7 +165,7 @@ function renderList() {
     const r = relevance(c, p);
     li.dataset.id = c.id;
     if (c.id === state.openId) { li.classList.add('active'); $('.item-btn', li).setAttribute('aria-current', 'true'); }
-    if (state.read.has(c.id)) li.classList.add('read');
+    if (!isUnread(c)) li.classList.add('read');
     if (c.level === 'urgente' && r !== 'docenti') li.classList.add('urgente');
     $('.n', li).textContent = c.n ?? '–';
     $('.d', li).textContent = c.date ? fmtShort.format(asDate(c.date)) : '';
@@ -164,10 +177,12 @@ function renderList() {
     else if (c.level === 'importante') tags.push(['importante', 'Importante']);
     if (c.deadline && daysFrom(c.deadline) >= 0) tags.push(['due', 'Entro ' + relDay(c.deadline)]);
     else if (c.when && daysFrom(c.when) >= 0 && daysFrom(c.when) < 14) tags.push(['due', relDay(c.when).replace(/^./, (x) => x.toUpperCase())]);
+    if (needsAction(c) && state.done.has(c.id)) tags.push(['dim', 'Fatto ✓']);
+    else if (isTodo(c)) tags.push(['todo', 'Da fare']);
     tags.push([r === 'tua' ? 'mine' : r === 'tutti' ? '' : 'dim', targetLabel(c, p)]);
     $('.meta', li).innerHTML = tags.map(([cls, txt]) => `<span class="tag ${cls}">${esc(txt)}</span>`).join('');
 
-    const label = `Circolare n. ${c.n}, ${c.title}. ${tags.map((t) => t[1]).join(', ')}${state.read.has(c.id) ? '' : ', da leggere'}`;
+    const label = `Circolare n. ${c.n}, ${c.title}. ${tags.map((t) => t[1]).join(', ')}${isUnread(c) ? ', da leggere' : ''}`;
     $('.item-btn', li).setAttribute('aria-label', label);
     list.append(li);
   }
@@ -209,6 +224,7 @@ function openDetail(id) {
     ${levelTxt && c.reasons?.length ? `<div class="why ${c.level}"><h3>${levelTxt}</h3><ul>${c.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul></div>` : ''}
     <div class="dates">${dates.map(([k, v]) => `<div><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>
     ${calendarButtons(c)}
+    ${needsAction(c) ? `<button class="done-btn ${state.done.has(c.id) ? 'is-done' : ''}" data-done="${esc(c.id)}" aria-pressed="${state.done.has(c.id)}">${state.done.has(c.id) ? 'Fatto ✓ Tocca per annullare' : 'Segna come fatto'}</button>` : ''}
     ${c.summary ? `<p class="summary">${esc(c.summary)}</p>` : ''}
     ${c.excerpt ? `<p class="text-label">Dal testo della circolare</p><p class="text">${esc(c.excerpt)}</p>` : (!c.detailDone ? '<p class="text">Il testo completo arriva al prossimo controllo. Intanto puoi aprirla sul sito.</p>' : '')}
     <section class="wa" aria-labelledby="wa-title">
@@ -226,7 +242,8 @@ function openDetail(id) {
     <div class="actions">
       <a class="primary" href="${esc(c.url)}" target="_blank" rel="noopener">Leggi sul sito della scuola</a>
       ${pdfs}
-    </div>`;
+    </div>
+    ${reportLink(c)}`;
 
   setupForward(c);
 
@@ -349,6 +366,125 @@ function openFromUrl(href = location.href) {
   if (id && state.items.some((c) => c.id === id)) openDetail(id);
 }
 
+/* ---------- Fatto e segnalazioni ---------- */
+
+function toggleDone(id) {
+  state.done.has(id) ? state.done.delete(id) : state.done.add(id);
+  store.set('cc-fatti', [...state.done].slice(-400));
+  toast(state.done.has(id) ? 'Segnata come fatta' : 'Tolta da “fatto”');
+  openDetail(id);
+}
+
+function reportLink(c) {
+  const r = relevance(c, state.profile || {});
+  if (r === 'docenti') return '';
+  const mine = r === 'tua' || r === 'tutti' || r === 'forse';
+  return `<p class="report"><button class="link-btn" data-report="${esc(c.id)}" data-tipo="${mine ? 'non-per-me' : 'per-me'}">${mine ? 'Non riguarda la mia classe?' : 'Riguarda anche la mia classe?'}</button></p>`;
+}
+
+async function sendReport(id, tipo) {
+  const p = state.profile || {};
+  const key = tipo === 'non-per-me' ? 'nonPerMe' : 'perMe';
+  const other = key === 'perMe' ? 'nonPerMe' : 'perMe';
+  state.profile = {
+    ...p,
+    [key]: [...new Set([...(p[key] || []), id])].slice(-150),
+    [other]: (p[other] || []).filter((x) => x !== id),
+  };
+  store.set('cc-profile', state.profile);
+  const sub = await currentSub().catch(() => null);
+  fetch('/api/report', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id, tipo, classe: p.classe, endpoint: sub?.endpoint }),
+  }).catch(() => {});
+  syncSubscription().catch(() => {});
+  toast(tipo === 'non-per-me' ? 'Grazie: non la vedrai più tra le tue' : 'Grazie: ora la vedi tra le tue');
+  openDetail(id);
+}
+
+/* ---------- Numero sull'icona ---------- */
+
+function updateBadge(n) {
+  try {
+    if (!('setAppBadge' in navigator)) return;
+    n ? navigator.setAppBadge(n) : navigator.clearAppBadge();
+    // Il service worker parte da qui quando arriva una nuova notifica
+    caches.open('cc-badge').then((c) => c.put('/badge', new Response(String(n))));
+  } catch {}
+}
+
+/* ---------- Installa l'app ---------- */
+
+let installEvent = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; renderInstall(); });
+window.addEventListener('appinstalled', () => { installEvent = null; store.set('cc-installata', true); renderInstall(); toast('App installata'); });
+
+function canOfferInstall() {
+  if (isStandalone || store.get('cc-installata', false)) return false;
+  const later = store.get('cc-install-dopo', 0);
+  if (Date.now() < later) return false;
+  return Boolean(installEvent) || isIOS;
+}
+
+function renderInstall() {
+  const box = $('#install');
+  if (!box) return;
+  box.hidden = !canOfferInstall();
+  if (box.hidden) return;
+  box.innerHTML = `<div><strong>Installa Circolari Curie</strong><span>Si apre come un’app e ti avvisa delle nuove circolari.</span></div>
+    <div class="install-actions"><button class="primary" data-install="go">Installa</button><button class="link-btn" data-install="later">Non ora</button></div>`;
+}
+
+async function doInstall() {
+  if (installEvent) {
+    installEvent.prompt();
+    const { outcome } = await installEvent.userChoice.catch(() => ({}));
+    installEvent = null;
+    if (outcome !== 'accepted') store.set('cc-install-dopo', Date.now() + 3 * 864e5);
+    renderInstall();
+  } else if (isIOS) {
+    $('#ios-install').showModal();
+  }
+}
+
+/* ---------- Amministratore ---------- */
+
+async function adminCall(action) {
+  const sub = await currentSub().catch(() => null);
+  if (!sub) return { error: 'Attiva prima le notifiche su questo dispositivo.' };
+  const res = await fetch('/api/admin/' + action, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) });
+  return res.json().catch(() => ({ error: 'Risposta non valida dal server.' }));
+}
+
+async function renderAdmin() {
+  const box = $('#admin-box');
+  const st = await adminCall('status');
+  if (!st.admin) {
+    box.innerHTML = `<button type="button" class="link-btn" data-admin="claim">Gestisci l’app (solo per chi l’ha creata)</button>`;
+    return;
+  }
+  const fmt = (d) => (d ? `${fmtShort.format(new Date(d))} alle ${fmtTime.format(new Date(d))}` : 'mai');
+  const reports = st.segnalazioni.map((r) => `<li><b>n. ${esc(r.n)}</b> ${esc(r.title)}<br><span>${r.tipo === 'non-per-me' ? 'Non è per' : 'È anche per'} la ${esc(r.classe || '?')}, ${fmt(r.at)}</span></li>`).join('');
+  box.innerHTML = `<h3 class="sub">Gestione</h3>
+    <div class="admin">
+      <p>Ultimo controllo: <b>${fmt(st.updatedAt)}</b>. Circolari salvate: <b>${st.circolari}</b>${st.archivio && !st.archivio.done ? ` (sto recuperando l’archivio, pagina ${st.archivio.page})` : ''}.</p>
+      <p>${st.errori ? `Controlli falliti di fila: <b>${st.errori}</b>. Ultimo errore: ${esc(st.ultimoErrore)}` : 'Nessun errore: il controllo funziona.'}</p>
+      <p>Se il controllo fallisce per circa un’ora, ti arriva una notifica.</p>
+      <h4>Segnalazioni (${st.segnalazioni.length})</h4>
+      ${reports ? `<ul class="reports">${reports}</ul>` : '<p>Nessuna segnalazione.</p>'}
+      <button type="button" class="link-btn" data-admin="release">Smetti di gestire l’app da questo dispositivo</button>
+    </div>`;
+}
+
+async function adminAction(action) {
+  if (action === 'claim' && !confirm('Diventi l’amministratore: riceverai gli avvisi se il controllo si blocca e le segnalazioni degli utenti. Solo un dispositivo può esserlo. Continuare?')) return;
+  if (action === 'release' && !confirm('Questo dispositivo smetterà di ricevere avvisi e segnalazioni. Continuare?')) return;
+  const r = await adminCall(action);
+  if (r.error) toast(r.error);
+  else toast(action === 'claim' ? 'Ora gestisci l’app da questo dispositivo' : 'Fatto');
+  renderAdmin();
+}
+
 /* ---------- Aggiungi al calendario ---------- */
 
 const ymd = (d) => d.replace(/-/g, '');
@@ -464,8 +600,10 @@ function fillProfileForm() {
   f.includiForse.checked = p.includiForse !== false;
   f.mostraDocenti.checked = Boolean(p.mostraDocenti);
   f.promemoria.checked = Boolean(p.promemoria);
+  f.altreClassi.value = (p.altreClassi || []).join(', ');
   f.riepilogo.checked = Boolean(p.riepilogo);
   renderNotifyBox();
+  renderAdmin();
 }
 
 function readProfileForm() {
@@ -481,6 +619,9 @@ function readProfileForm() {
     mostraDocenti: f.mostraDocenti.checked,
     promemoria: f.promemoria.checked,
     riepilogo: f.riepilogo.checked,
+    altreClassi: [...new Set(f.altreClassi.value.split(/[\s,;]+/).map(normClass).filter((k) => /^[1-5][A-Z]{1,4}$/.test(k)))].slice(0, 6),
+    perMe: state.profile?.perMe || [],
+    nonPerMe: state.profile?.nonPerMe || [],
   };
 }
 
@@ -594,6 +735,18 @@ document.addEventListener('click', (e) => {
     if (push.dataset.push === 'off') return disablePush();
     if (push.dataset.push === 'test') return testPush();
   }
+  const done = e.target.closest('[data-done]');
+  if (done) return toggleDone(done.dataset.done);
+  const rep = e.target.closest('[data-report]');
+  if (rep) return sendReport(rep.dataset.report, rep.dataset.tipo);
+  const inst = e.target.closest('[data-install]');
+  if (inst) {
+    if (inst.dataset.install === 'go') return doInstall();
+    store.set('cc-install-dopo', Date.now() + 7 * 864e5);
+    return renderInstall();
+  }
+  const adm = e.target.closest('[data-admin]');
+  if (adm) return adminAction(adm.dataset.admin);
   const cal = e.target.closest('[data-cal]');
   if (cal) return addToCalendar(cal.dataset.cal, cal.dataset.kind, cal.dataset.how);
   const item = e.target.closest('.item');
@@ -664,4 +817,6 @@ const cached = store.get('cc-cache', null);
 if (cached) { state.items = cached.items; state.updatedAt = cached.updatedAt; }
 render();
 load();
+renderInstall();
 if (!state.profile || !store.get('cc-tour', false)) openTour();
+else if (new URL(location.href).searchParams.get('admin')) { fillProfileForm(); $('#profile').showModal(); }

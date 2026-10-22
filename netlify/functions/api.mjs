@@ -1,5 +1,6 @@
 // API dell'app: elenco circolari, iscrizione alle notifiche, notifica di prova, aggiornamento manuale.
-import { loadIndex, saveSubscription, deleteSubscription, getSubscription } from '../../lib/store.mjs';
+import { loadIndex, saveSubscription, deleteSubscription, getSubscription, addReport, loadReports, loadConfig } from '../../lib/store.mjs';
+import { isAdmin, claimAdmin, releaseAdmin, notifyAdmin } from '../../lib/admin.mjs';
 import { runCheck } from '../../lib/core.mjs';
 import { send, vapidKeys } from '../../lib/push.mjs';
 import { SITE } from '../../lib/source.mjs';
@@ -8,7 +9,9 @@ import { buildIcs } from '../../lib/ics.mjs';
 const json = (data, status = 200, extra = {}) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...extra } });
 
-const PUBLIC_FIELDS = ['id', 'url', 'n', 'title', 'date', 'tipologie', 'targets', 'level', 'score', 'reasons', 'deadline', 'when', 'tags', 'excerpt', 'summary', 'pdfs', 'detailDone'];
+const PUBLIC_FIELDS = ['id', 'url', 'n', 'title', 'date', 'tipologie', 'targets', 'level', 'score', 'reasons', 'deadline', 'when', 'tags', 'excerpt', 'summary', 'pdfs', 'detailDone', 'archived'];
+
+const ids = (a) => (Array.isArray(a) ? a.filter((x) => typeof x === 'string' && x.length < 120).slice(-150) : []);
 
 function cleanProfile(p = {}) {
   const ok = (v, list) => (list.includes(v) ? v : undefined);
@@ -21,6 +24,11 @@ function cleanProfile(p = {}) {
     mostraDocenti: Boolean(p.mostraDocenti),
     promemoria: Boolean(p.promemoria),
     riepilogo: Boolean(p.riepilogo),
+    altreClassi: Array.isArray(p.altreClassi)
+      ? p.altreClassi.map((k) => String(k).toUpperCase().replace(/[^0-9A-Z]/g, '')).filter((k) => /^[1-5][A-Z]{1,4}$/.test(k)).slice(0, 6)
+      : [],
+    perMe: ids(p.perMe),
+    nonPerMe: ids(p.nonPerMe),
   };
 }
 
@@ -69,6 +77,50 @@ export default async (req) => {
         url: '/',
       });
       return json(r, r.ok ? 200 : 502);
+    }
+
+    if (route === 'report' && req.method === 'POST') {
+      // Segnalazione "Non è per me" / "È per me": va all'amministratore per migliorare le regole
+      const { id, tipo, classe, endpoint } = await req.json();
+      const index = await loadIndex();
+      const c = index.items.find((x) => x.id === id);
+      if (!c || !['non-per-me', 'per-me'].includes(tipo)) return json({ error: 'Segnalazione non valida.' }, 400);
+      const cls = String(classe || '').toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 8);
+      await addReport({ id, n: c.n, title: c.title, tipo, classe: cls, targets: c.targets });
+      if (!(await isAdmin(endpoint))) {
+        await notifyAdmin({
+          title: tipo === 'non-per-me' ? 'Segnalazione: non è per questa classe' : 'Segnalazione: riguarda anche questa classe',
+          body: `Circolare n. ${c.n} (${c.title.slice(0, 60)}), classe ${cls || '?'}`,
+        });
+      }
+      return json({ ok: true });
+    }
+
+    if (route.startsWith('admin/') && req.method === 'POST') {
+      const { endpoint } = await req.json();
+      const action = route.slice(6);
+      if (action === 'claim') {
+        const r = await claimAdmin(endpoint);
+        if (!r.ok) return json({ error: r.reason === 'taken' ? 'C’è già un amministratore su un altro dispositivo.' : 'Attiva prima le notifiche su questo dispositivo.' }, 403);
+        return json({ ok: true });
+      }
+      if (!(await isAdmin(endpoint))) return json({ admin: false });
+      if (action === 'status') {
+        const cfg = await loadConfig();
+        const index = await loadIndex();
+        return json({
+          admin: true,
+          updatedAt: index.updatedAt,
+          circolari: index.items.length,
+          archivio: index.archive || null,
+          errori: cfg.failCount || 0,
+          ultimoErrore: cfg.lastError || null,
+          ultimoErroreIl: cfg.lastErrorAt || null,
+          segnalazioni: (await loadReports()).slice(0, 50),
+        });
+      }
+      if (action === 'release') return json(await releaseAdmin(endpoint));
+      return json({ error: 'Azione sconosciuta.' }, 404);
     }
 
     if (route === 'ics' && req.method === 'GET') {
