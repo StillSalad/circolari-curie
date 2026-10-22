@@ -2,6 +2,7 @@
 import { loadIndex, saveSubscription, deleteSubscription, getSubscription } from '../../lib/store.mjs';
 import { runCheck } from '../../lib/core.mjs';
 import { send, vapidKeys } from '../../lib/push.mjs';
+import { SITE } from '../../lib/source.mjs';
 
 const json = (data, status = 200, extra = {}) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...extra } });
@@ -65,6 +66,23 @@ export default async (req) => {
         url: '/',
       });
       return json(r, r.ok ? 200 : 502);
+    }
+
+    if (route === 'pdf' && req.method === 'GET') {
+      // Scarica un PDF dal sito della scuola, così l'app può allegarlo su WhatsApp
+      let target;
+      try { target = new URL(url.searchParams.get('u') || ''); } catch { return json({ error: 'Indirizzo non valido.' }, 400); }
+      const school = new URL(SITE).hostname.replace(/^www\./, '');
+      if (target.protocol !== 'https:' || !target.hostname.replace(/^www\./, '').endsWith(school)) {
+        return json({ error: 'Posso scaricare solo PDF dal sito della scuola.' }, 403);
+      }
+      const res = await fetch(target, { headers: { 'User-Agent': 'CircolariCurie/1.0' }, signal: AbortSignal.timeout(9000) });
+      if (!res.ok) return json({ error: 'Il sito della scuola non ha restituito il PDF.' }, 502);
+      const buf = await res.arrayBuffer();
+      const isPdf = (res.headers.get('content-type') || '').includes('pdf') || new TextDecoder().decode(buf.slice(0, 5)) === '%PDF-';
+      if (!isPdf) return json({ error: 'Il file non è un PDF.' }, 415);
+      if (buf.byteLength > 5.5 * 1024 * 1024) return json({ error: 'Il PDF è troppo grande da allegare.' }, 413);
+      return new Response(buf, { headers: { 'content-type': 'application/pdf', 'cache-control': 'public, max-age=86400' } });
     }
 
     if (route === 'refresh') {

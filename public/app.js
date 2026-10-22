@@ -206,23 +206,132 @@ function openDetail(id) {
     <div class="dates">${dates.map(([k, v]) => `<div><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>
     ${c.summary ? `<p class="summary">${esc(c.summary)}</p>` : ''}
     ${c.excerpt ? `<p class="text-label">Dal testo della circolare</p><p class="text">${esc(c.excerpt)}</p>` : (!c.detailDone ? '<p class="text">Il testo completo arriva al prossimo controllo. Intanto puoi aprirla sul sito.</p>' : '')}
+    <section class="wa" aria-labelledby="wa-title">
+      <h3 id="wa-title">Inoltra alla classe</h3>
+      <button class="wa-btn" id="wa-send" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.3-.4.8-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.9 11.9 0 0 0 4.6 4c1.7.7 2.4.8 3.2.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.2-.2-.5-.3Z"/></svg>
+        <span id="wa-label">Preparo il PDF…</span>
+      </button>
+      <details class="wa-preview">
+        <summary>Vedi il messaggio</summary>
+        <pre id="wa-text"></pre>
+      </details>
+      <button class="link-btn" id="wa-copy">Copia solo il messaggio</button>
+    </section>
     <div class="actions">
       <a class="primary" href="${esc(c.url)}" target="_blank" rel="noopener">Leggi sul sito della scuola</a>
       ${pdfs}
-      <button class="secondary" id="share">Condividi</button>
     </div>`;
 
-  $('#share').onclick = async () => {
-    const data = { title: `Circolare n. ${c.n}`, text: c.title, url: c.url };
-    if (navigator.share) { try { await navigator.share(data); } catch {} }
-    else { await navigator.clipboard?.writeText(c.url); toast('Link copiato'); }
-  };
+  setupForward(c);
 
   const dlg = $('#detail');
   if (!dlg.open) dlg.showModal();
   dlg.scrollTop = 0;
   history.replaceState(null, '', '?c=' + encodeURIComponent(id));
   render();
+}
+
+/* ---------- Inoltro su WhatsApp ---------- */
+
+const ANNI = ['', 'prime', 'seconde', 'terze', 'quarte', 'quinte'];
+
+// Destinatari scritti per il gruppo, non per il singolo utente
+function groupTarget(c) {
+  const t = c.targets || {};
+  if (t.docentiOnly) return 'Docenti e personale';
+  const parti = [];
+  if (t.years?.length) parti.push('classi ' + t.years.map((y) => ANNI[y]).join(', ').replace(/, ([^,]*)$/, ' e $1'));
+  if (t.classes?.length) parti.push(t.classes.join(', '));
+  if (parti.length) return parti.join(', ').replace(/^./, (x) => x.toUpperCase());
+  return 'Tutti gli studenti';
+}
+
+function shortText(c, max = 320) {
+  const t = (c.summary || c.excerpt || '').replace(/^oggetto\s*:\s*/i, '').trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const dot = cut.lastIndexOf('. ');
+  return dot > max * 0.5 ? cut.slice(0, dot + 1) : cut.replace(/\s\S*$/, '') + '…';
+}
+
+function mainReason(c) {
+  // Le scadenze e le date hanno già una riga loro: scegli il motivo più informativo
+  const r = (c.reasons || []).find((x) => !/scadenza|prossimi giorni/i.test(x)) || c.reasons?.[0];
+  return r ? ': ' + r.charAt(0).toLowerCase() + r.slice(1) : '';
+}
+
+export function buildMessage(c) {
+  const righe = [`📄 *Circolare n. ${c.n}: ${c.title}*`];
+  if (c.date) righe.push(`🗓️ Pubblicata ${fmtLong.format(asDate(c.date))}`);
+  if (c.level === 'urgente') righe.push(`🚨 *Urgente*${mainReason(c)}`);
+  else if (c.level === 'importante') righe.push(`⚠️ *Importante*${mainReason(c)}`);
+  righe.push(`👥 Per: ${groupTarget(c)}`);
+  if (c.when) righe.push(`📌 Quando: ${fmtLong.format(asDate(c.when))}`);
+  if (c.deadline) righe.push(`⏰ *Scadenza: ${fmtLong.format(asDate(c.deadline))}*`);
+  const breve = shortText(c);
+  if (breve) righe.push('', `*In breve:* ${breve}`);
+  righe.push('', `🔗 ${c.url}`);
+  return righe.join('\n');
+}
+
+function pdfSource(c) {
+  // Prima l'allegato; se manca, il PDF che il sito genera dalla pagina della circolare
+  return c.pdfs?.[0] || c.url.replace(/\/?$/, '/') + '?pdf=true';
+}
+
+function pdfName(c) {
+  const slug = c.title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
+  return `Circolare-${c.n}-${slug}.pdf`;
+}
+
+const pdfCache = new Map();
+async function loadPdf(c) {
+  if (pdfCache.has(c.id)) return pdfCache.get(c.id);
+  const p = fetch('/api/pdf?u=' + encodeURIComponent(pdfSource(c)))
+    .then((r) => (r.ok ? r.blob() : null))
+    .then((b) => (b && b.size ? new File([b], pdfName(c), { type: 'application/pdf' }) : null))
+    .catch(() => null);
+  pdfCache.set(c.id, p);
+  return p;
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch { return false; }
+}
+
+function openWhatsAppText(text) {
+  location.href = 'https://wa.me/?text=' + encodeURIComponent(text);
+}
+
+function setupForward(c) {
+  const text = buildMessage(c);
+  const btn = $('#wa-send');
+  const label = $('#wa-label');
+  $('#wa-text').textContent = text;
+  $('#wa-copy').onclick = async () => toast((await copyText(text)) ? 'Messaggio copiato' : 'Non riesco a copiare: tieni premuto sul testo');
+
+  let file = null;
+  const canShareFiles = (f) => { try { return Boolean(navigator.canShare?.({ files: [f] })); } catch { return false; } };
+
+  loadPdf(c).then((f) => {
+    if ($('#wa-send') !== btn) return; // l'utente ha aperto un'altra circolare
+    file = f && canShareFiles(f) ? f : null;
+    label.textContent = file ? 'Inoltra PDF e messaggio' : 'Inoltra messaggio con link';
+    btn.disabled = false;
+  });
+
+  btn.onclick = async () => {
+    if (!file) return openWhatsAppText(text);
+    // Su iPhone WhatsApp a volte scarta il testo che accompagna un file: lo copiamo prima
+    const copied = copyText(text); // senza attendere: share() va chiamato subito dopo il tocco
+    try {
+      await navigator.share({ files: [file], text });
+      if (isIOS && (await copied)) toast('Se il messaggio non compare, incollalo: è già copiato');
+    } catch (err) {
+      if (err?.name !== 'AbortError') openWhatsAppText(text);
+    }
+  };
 }
 
 function openFromUrl(href = location.href) {

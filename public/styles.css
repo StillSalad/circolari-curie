@@ -177,6 +177,22 @@ main { max-width: 680px; margin: 0 auto; padding: 4px 18px 48px; }
 .secondary { background: var(--mist); color: var(--navy); }
 .primary[disabled] { opacity: .5; }
 
+.wa { margin: 26px 0 0; padding: 16px; border-radius: 14px; background: var(--mist); }
+.wa h3 { margin: 0 0 10px; font: 600 20px/1.2 var(--serif); color: var(--navy); }
+.wa-btn {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 14px 16px; border: 0; border-radius: 12px; background: #1F8F4E; color: #fff; font-weight: 700;
+}
+.wa-btn svg { width: 22px; height: 22px; fill: currentColor; flex: none; }
+.wa-btn[disabled] { opacity: .65; cursor: progress; }
+.wa-preview { margin-top: 12px; }
+.wa-preview summary { cursor: pointer; color: var(--blue); font-weight: 600; }
+.wa-preview pre {
+  white-space: pre-wrap; word-break: break-word; margin: 10px 0 0; padding: 12px 14px; border-radius: 10px 10px 10px 2px;
+  background: var(--paper); font: 400 15px/1.45 var(--sans); color: var(--ink); max-height: 50vh; overflow: auto;
+}
+.link-btn { margin-top: 10px; border: 0; background: none; padding: 4px 0; color: var(--blue); font-weight: 600; }
+
 /* Modulo profilo */
 .hint { color: var(--muted); margin: 0 0 16px; max-width: 56ch; }
 fieldset { border: 0; padding: 0; margin: 20px 0 0; }
