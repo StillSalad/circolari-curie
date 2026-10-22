@@ -90,3 +90,19 @@ assert.deepEqual(findClasses('classi 3A, 3B e 4C'), ['3A', '3B', '4C']);
 const quarte = classify({ title: 'Uscita', text: 'Agli studenti delle classi quarte', tipologie: ['Circolari per alunni e famiglie'], date });
 assert.equal(quarte.targets.all, false);
 console.log('✓ caso reale circolare 78');
+
+// Caso reale: circolare 77, intestazione generica "Agli studenti" ma titolo per le prime
+const orient = classify({
+  title: 'Corso ORIENTAMETODO per gli alunni delle classi PRIME',
+  text: 'Circolare n. 77 del 20 ottobre 2026 Agli studenti Ai docenti Oggetto: corso di metodo di studio. Il corso si terrà il 27 ottobre.',
+  tipologie: ['Circolari per alunni e famiglie'], date: '2026-10-20',
+});
+assert.equal(orient.targets.all, false);
+assert.deepEqual(orient.targets.years, [1]);
+assert.equal(relevance(orient, { classe: '2ASA' }), 'altri');
+assert.equal(relevance(orient, { classe: '1B' }), 'tua');
+const acc = classify({ title: 'Attività di accoglienza classi PRIME', text: 'Agli studenti', tipologie: ['Circolari per alunni e famiglie'], date: '2026-10-16' });
+assert.equal(relevance(acc, { classe: '2ASA' }), 'altri');
+const generica = classify({ title: 'AscoltaMI servizio psicologico', text: 'Agli studenti e alle famiglie', tipologie: ['Circolari per alunni e famiglie'], date: '2026-10-16' });
+assert.equal(generica.targets.all, true);
+console.log('✓ caso reale circolare 77');
