@@ -1,0 +1,16 @@
+{
+  "name": "Circolari Curie",
+  "short_name": "Circolari",
+  "description": "Le circolari del Liceo Marie Curie di Meda, filtrate per la tua classe, con notifiche.",
+  "lang": "it",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F4F8FD",
+  "theme_color": "#123D70",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

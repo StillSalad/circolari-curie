@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Circolari Curie</title>
+  <meta name="description" content="Le circolari del Liceo Marie Curie di Meda, filtrate per la tua classe, con notifiche.">
+  <meta name="theme-color" content="#123D70">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Circolari">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&family=Titillium+Web:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/" aria-label="Circolari Curie, torna all'elenco">
+      <img class="logo logo-light" src="/img/logo-navy.png" alt="Circolari Curie" width="909" height="244">
+      <img class="logo logo-dark" src="/img/logo-white.png" alt="" width="909" height="244">
+    </a>
+    <button class="icon-btn" id="btn-profile" aria-label="Profilo e notifiche">
+      <span class="class-pill" id="class-pill">Classe</span>
+    </button>
+  </header>
+
+  <main id="main">
+    <section class="today" id="today" aria-live="polite"></section>
+
+    <div class="controls">
+      <div class="seg" role="tablist" aria-label="Quali circolari mostrare">
+        <button role="tab" data-filter="mine" aria-selected="true">Per me</button>
+        <button role="tab" data-filter="urgent" aria-selected="false">Importanti</button>
+        <button role="tab" data-filter="all" aria-selected="false">Tutte</button>
+      </div>
+      <label class="search">
+        <span class="sr-only">Cerca nelle circolari</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+        <input id="q" type="search" placeholder="Cerca: sciopero, gita, Atene…" autocomplete="off">
+      </label>
+    </div>
+
+    <ol class="list" id="list" aria-label="Circolari"></ol>
+    <p class="foot" id="foot"></p>
+  </main>
+
+  <!-- Dettaglio circolare -->
+  <dialog class="sheet" id="detail" aria-labelledby="d-title">
+    <div class="sheet-inner">
+      <button class="back" data-close>Indietro</button>
+      <article id="d-body"></article>
+    </div>
+  </dialog>
+
+  <!-- Profilo e notifiche -->
+  <dialog class="sheet" id="profile" aria-labelledby="p-title">
+    <form class="sheet-inner" id="profile-form" method="dialog">
+      <button class="back" type="button" data-close>Chiudi</button>
+      <h2 id="p-title" class="sheet-title">La tua classe</h2>
+      <p class="hint">Serve a mostrarti prima le circolari che ti riguardano. Resta su questo telefono; al server arrivano solo classe, indirizzo e preferenze di notifica.</p>
+
+      <fieldset>
+        <legend>Anno</legend>
+        <div class="years" id="years">
+          <label><input type="radio" name="anno" value="1"><span>1^</span></label>
+          <label><input type="radio" name="anno" value="2"><span>2^</span></label>
+          <label><input type="radio" name="anno" value="3"><span>3^</span></label>
+          <label><input type="radio" name="anno" value="4"><span>4^</span></label>
+          <label><input type="radio" name="anno" value="5"><span>5^</span></label>
+        </div>
+      </fieldset>
+
+      <label class="field">
+        <span>Sezione</span>
+        <input name="sezione" id="sezione" maxlength="5" placeholder="Come sul registro, es. A, B, CSA" autocapitalize="characters" autocomplete="off">
+      </label>
+
+      <label class="field">
+        <span>Indirizzo</span>
+        <select name="indirizzo" id="indirizzo">
+          <option value="">Scegli</option>
+          <option value="scientifico">Scientifico</option>
+          <option value="scienze_applicate">Scienze applicate</option>
+          <option value="classico">Classico</option>
+          <option value="linguistico">Linguistico</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>Nome <small>(facoltativo, solo per salutarti)</small></span>
+        <input name="nome" id="nome" maxlength="30" autocomplete="given-name">
+      </label>
+
+      <h3 class="sub">Notifiche</h3>
+      <div class="notify-box" id="notify-box"></div>
+
+      <fieldset>
+        <legend>Avvisami per</legend>
+        <label class="row"><input type="radio" name="soglia" value="normale"> Ogni circolare che mi riguarda</label>
+        <label class="row"><input type="radio" name="soglia" value="importante"> Solo importanti e urgenti</label>
+        <label class="row"><input type="radio" name="soglia" value="urgente"> Solo urgenti</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Avvisami sempre anche per</legend>
+        <div class="chips" id="interessi"></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Altre opzioni</legend>
+        <label class="row"><input type="checkbox" name="includiForse" checked> Includi le circolari incerte (il mio anno, ma forse un altro indirizzo)</label>
+        <label class="row"><input type="checkbox" name="mostraDocenti"> Mostra anche le circolari solo per docenti</label>
+      </fieldset>
+
+      <button class="primary" id="save-profile" type="submit">Salva</button>
+      <p class="credits">App non ufficiale, non collegata al Liceo. Fa fede sempre il sito della scuola.<br>Creata da LolloMarta.</p>
+    </form>
+  </dialog>
+
+  <template id="tpl-item">
+    <li class="item">
+      <button class="item-btn">
+        <span class="num"><span class="n"></span><time class="d"></time></span>
+        <span class="body">
+          <span class="title"></span>
+          <span class="meta"></span>
+        </span>
+      </button>
+    </li>
+  </template>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
