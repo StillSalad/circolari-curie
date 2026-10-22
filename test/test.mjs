@@ -1,6 +1,6 @@
 // Test rapidi senza rete: npm test
 import assert from 'node:assert/strict';
-import { classify, findClasses, findYears } from '../lib/classify.mjs';
+import { classify, findClasses, findYears, excerpt } from '../lib/classify.mjs';
 import { parseArchive, parseSlug } from '../lib/source.mjs';
 import { relevance, shouldNotify, targetLabel } from '../public/match.js';
 
@@ -72,3 +72,21 @@ import { findIndirizzi } from '../lib/classify.mjs';
 assert.deepEqual(findIndirizzi('classi terze del liceo scientifico opzione scienze applicate'), ['scienze_applicate']);
 assert.deepEqual(findIndirizzi('classi quarte scientifico e linguistico'), ['scientifico', 'linguistico']);
 console.log('✓ indirizzi');
+
+// Caso reale: circolare n. 78 (assemblea), apostrofo tipografico, data di pubblicazione nel testo, orari
+const assemblea = classify({
+  title: 'Assemblea studentesca d’Istituto',
+  text: 'Ministero dell’Istruzione e del Merito Liceo Statale “Marie Curie” Circolare n. 78 del 21 ottobre 2026 Agli studenti Ai Docenti Oggetto: Assemblea studentesca d’Istituto. Martedì 27 ottobre 2026, dalle ore 8.55 alle ore 10.45 si terrà in Auditorium l’Assemblea aperta ai rappresentanti di classe; gli altri studenti parteciperanno in collegamento dalle proprie classi. Rif. aula 2D.',
+  tipologie: ['Circolari per alunni e famiglie', 'Circolari per docenti e personale ATA'],
+  date: '2026-10-21',
+});
+assert.equal(assemblea.targets.all, true);
+assert.deepEqual(assemblea.targets.classes, []);
+assert.equal(assemblea.when, '2026-10-27');
+assert.equal(relevance(assemblea, io), 'tutti');
+assert.deepEqual(findClasses('Rif. aula 2D e altro'), []);
+assert.deepEqual(findClasses('per gli alunni della 2D'), ['2D']);
+assert.deepEqual(findClasses('classi 3A, 3B e 4C'), ['3A', '3B', '4C']);
+const quarte = classify({ title: 'Uscita', text: 'Agli studenti delle classi quarte', tipologie: ['Circolari per alunni e famiglie'], date });
+assert.equal(quarte.targets.all, false);
+console.log('✓ caso reale circolare 78');

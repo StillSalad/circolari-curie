@@ -248,6 +248,7 @@ const ANNI = ['', 'prime', 'seconde', 'terze', 'quarte', 'quinte'];
 function groupTarget(c) {
   const t = c.targets || {};
   if (t.docentiOnly) return 'Docenti e personale';
+  if (t.all) return 'Tutti gli studenti';
   const parti = [];
   if (t.years?.length) parti.push('classi ' + t.years.map((y) => ANNI[y]).join(', ').replace(/, ([^,]*)$/, ' e $1'));
   if (t.classes?.length) parti.push(t.classes.join(', '));
@@ -256,7 +257,7 @@ function groupTarget(c) {
 }
 
 function shortText(c, max = 320) {
-  const t = (c.summary || c.excerpt || '').replace(/^oggetto\s*:\s*/i, '').trim();
+  const t = (c.summary || c.excerpt || '').replace(/^oggetto\s*:\s*/i, '').replace(/^[\s.,;:–-]+/, '').trim();
   if (t.length <= max) return t;
   const cut = t.slice(0, max);
   const dot = cut.lastIndexOf('. ');
