@@ -194,6 +194,19 @@ main { max-width: 680px; margin: 0 auto; padding: 4px 18px 48px; }
 }
 .link-btn { margin-top: 10px; border: 0; background: none; padding: 4px 0; color: var(--blue); font-weight: 600; }
 
+/* Dettagli che cambiano col tempo */
+.item.concluded .title { color: var(--muted); font-weight: 400; }
+.item.concluded .num .n { color: var(--muted); }
+.countdown { margin: 14px 0 0; font-size: 16px; color: var(--muted); }
+.countdown b { color: var(--navy); font: 600 20px/1 var(--serif); margin-right: 4px; }
+.countdown.now { color: var(--red); font-weight: 700; }
+.ended-banner { margin: 14px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--mist); color: var(--muted); font-size: 15px; }
+.for-class, .todo-box { margin: 16px 0 0; padding: 12px 14px; border-radius: 10px; border-left: 3px solid var(--blue); background: var(--mist); }
+.todo-box { border-left-color: var(--gold); }
+.for-class h3, .todo-box h3 { margin: 0 0 4px; font-size: 15px; color: var(--navy); }
+.todo-box h3 { color: var(--gold); }
+.for-class p, .todo-box p { margin: 0; font: 400 17px/1.5 var(--serif); }
+
 /* Installa */
 .install {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px;

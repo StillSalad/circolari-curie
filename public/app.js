@@ -1,4 +1,4 @@
-import { relevance, isForMe, targetLabel, normClass, INTERESSI } from './match.js';
+import { relevance, isForMe, targetLabel, normClass, INTERESSI, effectiveLevel, isConcluded, eventDate, eventTime, classInfoFor } from './match.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const store = {
@@ -30,7 +30,14 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const isUnread = (c) => !state.read.has(c.id) && !c.archived && (daysFrom(c.date) ?? 0) >= -14;
 // Da fare: ha una scadenza o chiede firme, moduli, pagamenti
 const needsAction = (c) => Boolean(c.deadline) || (c.reasons || []).some((r) => /firma|modulo|pagamento/i.test(r));
-const isTodo = (c) => needsAction(c) && !state.done.has(c.id) && (!c.deadline || daysFrom(c.deadline) >= 0);
+// Livello e date "di oggi", calcolati per il profilo (stessa logica del server)
+const lvl = (c) => effectiveLevel(c, state.profile || {});
+const ended = (c) => isConcluded(c, state.profile || {});
+const evDate = (c) => eventDate(c, state.profile || {});
+const evTime = (c) => eventTime(c, state.profile || {});
+const hhmm = (t) => t.replace(/^0/, '');
+const timeLabel = (t) => (t ? (t.end ? `${hhmm(t.start)}–${hhmm(t.end)}` : `ore ${hhmm(t.start)}`) : '');
+const isTodo = (c) => needsAction(c) && !state.done.has(c.id) && !ended(c) && (!c.deadline || daysFrom(c.deadline) >= 0);
 
 function daysFrom(dateStr) {
   const d = asDate(dateStr); if (!d) return null;
@@ -79,7 +86,7 @@ function visibleItems() {
   return state.items.filter((c) => {
     const r = relevance(c, p);
     if (state.filter === 'mine' && !isForMe(c, p) && !(p.mostraDocenti && r === 'docenti')) return false;
-    if (state.filter === 'urgent' && (c.level === 'normale' || !(isForMe(c, p) || (p.mostraDocenti && r === 'docenti')))) return false;
+    if (state.filter === 'urgent' && (lvl(c) === 'normale' || !(isForMe(c, p) || (p.mostraDocenti && r === 'docenti')))) return false;
     if (state.filter === 'all' && r === 'docenti' && !p.mostraDocenti && !q) return false;
     if (q) {
       const hay = [c.title, c.excerpt, c.summary, 'n. ' + c.n, c.n].join(' ').toLowerCase();
@@ -95,7 +102,7 @@ function renderToday() {
   const p = state.profile || {};
   const cls = normClass(p.classe);
   const mine = state.items.filter((c) => isForMe(c, p));
-  const urgent = mine.filter((c) => c.level === 'urgente' && isUnread(c));
+  const urgent = mine.filter((c) => lvl(c) === 'urgente' && (isUnread(c) || !state.read.has(c.id)));
   const unread = mine.filter(isUnread);
   const todo = mine.filter(isTodo);
   const hello = p.nome ? `Ciao ${esc(p.nome)}. ` : '';
@@ -166,17 +173,26 @@ function renderList() {
     li.dataset.id = c.id;
     if (c.id === state.openId) { li.classList.add('active'); $('.item-btn', li).setAttribute('aria-current', 'true'); }
     if (!isUnread(c)) li.classList.add('read');
-    if (c.level === 'urgente' && r !== 'docenti') li.classList.add('urgente');
+    const L = lvl(c);
+    if (L === 'urgente' && r !== 'docenti') li.classList.add('urgente');
+    if (ended(c)) li.classList.add('concluded');
     $('.n', li).textContent = c.n ?? '–';
     $('.d', li).textContent = c.date ? fmtShort.format(asDate(c.date)) : '';
     if (c.date) $('.d', li).dateTime = c.date;
     $('.title', li).textContent = c.title;
 
     const tags = [];
-    if (c.level === 'urgente') tags.push(['urgente', 'Urgente']);
-    else if (c.level === 'importante') tags.push(['importante', 'Importante']);
-    if (c.deadline && daysFrom(c.deadline) >= 0) tags.push(['due', 'Entro ' + relDay(c.deadline)]);
-    else if (c.when && daysFrom(c.when) >= 0 && daysFrom(c.when) < 14) tags.push(['due', relDay(c.when).replace(/^./, (x) => x.toUpperCase())]);
+    const ev = evDate(c);
+    if (ended(c)) tags.push(['dim', 'Conclusa']);
+    else if (L === 'urgente') tags.push(['urgente', 'Urgente']);
+    else if (L === 'importante') tags.push(['importante', 'Importante']);
+    if (!ended(c)) {
+      if (c.deadline && daysFrom(c.deadline) >= 0) tags.push(['due', 'Entro ' + relDay(c.deadline)]);
+      else if (ev && daysFrom(ev) >= 0 && daysFrom(ev) < 14) {
+        const t = evTime(c);
+        tags.push(['due', relDay(ev).replace(/^./, (x) => x.toUpperCase()) + (t ? ', ' + hhmm(t.start) : '')]);
+      }
+    }
     if (needsAction(c) && state.done.has(c.id)) tags.push(['dim', 'Fatto ✓']);
     else if (isTodo(c)) tags.push(['todo', 'Da fare']);
     tags.push([r === 'tua' ? 'mine' : r === 'tutti' ? '' : 'dim', targetLabel(c, p)]);
@@ -210,21 +226,38 @@ function openDetail(id) {
   store.set('cc-letti', [...state.read].slice(-600));
 
   const p = state.profile || {};
-  const levelTxt = { urgente: 'Perché è urgente', importante: 'Perché è importante' }[c.level];
+  const L = lvl(c);
+  const finished = ended(c);
+  const levelTxt = finished ? null : { urgente: 'Perché è urgente', importante: 'Perché è importante' }[L];
+  const ev = evDate(c);
+  const info = classInfoFor(c, p);
   const dates = [];
+  if (ev) dates.push(['Quando', fmtLong.format(asDate(ev)) + (evTime(c) ? `, ${timeLabel(evTime(c))}` : '')]);
+  if (c.where) dates.push(['Dove', c.where]);
   if (c.deadline) dates.push(['Scadenza', fmtLong.format(asDate(c.deadline))]);
-  if (c.when) dates.push(['Data indicata', fmtLong.format(asDate(c.when))]);
   dates.push(['Per chi', targetLabel(c, p)]);
+  const countdown = (() => {
+    if (finished) return '';
+    const next = [ev, c.deadline].filter((d) => d && daysFrom(d) >= 0).sort()[0];
+    if (!next) return '';
+    const n = daysFrom(next);
+    const what = next === c.deadline ? 'alla scadenza' : '';
+    return n === 0 ? `<p class="countdown now">È oggi${what ? ' la scadenza' : ''}</p>`
+      : `<p class="countdown"><b>${n === 1 ? 'Domani' : `Tra ${n} giorni`}</b>${what ? ' ' + what : ''}</p>`;
+  })();
 
   const pdfs = (c.pdfs || []).map((u, i) => `<a class="secondary" href="${esc(u)}" target="_blank" rel="noopener">Apri l’allegato PDF${c.pdfs.length > 1 ? ' ' + (i + 1) : ''}</a>`).join('');
 
   $('#d-body').innerHTML = `
     <p class="d-num"><b>n. ${esc(c.n)}</b> pubblicata ${c.date ? fmtLong.format(asDate(c.date)) : ''}</p>
     <h2 id="d-title">${esc(c.title)}</h2>
-    ${levelTxt && c.reasons?.length ? `<div class="why ${c.level}"><h3>${levelTxt}</h3><ul>${c.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul></div>` : ''}
+    ${finished ? `<p class="ended-banner">Conclusa: la data indicata è passata. La trovi qui per consultarla.</p>` : countdown}
+    ${levelTxt && c.reasons?.length ? `<div class="why ${L}"><h3>${levelTxt}</h3><ul>${c.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul></div>` : ''}
+    ${info ? `<div class="for-class"><h3>Per la ${esc(info.classe)}</h3><p>${esc(info.s)}</p></div>` : ''}
+    ${c.todo && !finished ? `<div class="todo-box"><h3>Cosa devi fare</h3><p>${esc(c.todo)}</p></div>` : ''}
     <div class="dates">${dates.map(([k, v]) => `<div><span>${k}</span><b>${esc(v)}</b></div>`).join('')}</div>
     ${calendarButtons(c)}
-    ${needsAction(c) ? `<button class="done-btn ${state.done.has(c.id) ? 'is-done' : ''}" data-done="${esc(c.id)}" aria-pressed="${state.done.has(c.id)}">${state.done.has(c.id) ? 'Fatto ✓ Tocca per annullare' : 'Segna come fatto'}</button>` : ''}
+    ${needsAction(c) && (!finished || state.done.has(c.id)) ? `<button class="done-btn ${state.done.has(c.id) ? 'is-done' : ''}" data-done="${esc(c.id)}" aria-pressed="${state.done.has(c.id)}">${state.done.has(c.id) ? 'Fatto ✓ Tocca per annullare' : 'Segna come fatto'}</button>` : ''}
     ${c.summary ? `<p class="summary">${esc(c.summary)}</p>` : ''}
     ${c.excerpt ? `<p class="text-label">Dal testo della circolare</p><p class="text">${esc(c.excerpt)}</p>` : (!c.detailDone ? '<p class="text">Il testo completo arriva al prossimo controllo. Intanto puoi aprirla sul sito.</p>' : '')}
     <section class="wa" aria-labelledby="wa-title">
@@ -291,13 +324,18 @@ function mainReason(c) {
 export function buildMessage(c) {
   const righe = [`📄 *Circolare n. ${c.n}: ${c.title}*`];
   if (c.date) righe.push(`🗓️ Pubblicata ${fmtLong.format(asDate(c.date))}`);
-  if (c.level === 'urgente') righe.push(`🚨 *Urgente*${mainReason(c)}`);
-  else if (c.level === 'importante') righe.push(`⚠️ *Importante*${mainReason(c)}`);
+  const L = effectiveLevel(c, {});
+  if (!isConcluded(c, {})) {
+    if (L === 'urgente') righe.push(`🚨 *Urgente*${mainReason(c)}`);
+    else if (L === 'importante') righe.push(`⚠️ *Importante*${mainReason(c)}`);
+  }
   righe.push(`👥 Per: ${groupTarget(c)}`);
-  if (c.when) righe.push(`📌 Quando: ${fmtLong.format(asDate(c.when))}`);
+  if (c.when) righe.push(`📌 Quando: ${fmtLong.format(asDate(c.when))}${c.whenTime ? ', ' + timeLabel(c.whenTime) : ''}`);
+  if (c.where) righe.push(`📍 Dove: ${c.where}`);
   if (c.deadline) righe.push(`⏰ *Scadenza: ${fmtLong.format(asDate(c.deadline))}*`);
   const breve = shortText(c);
   if (breve) righe.push('', `*In breve:* ${breve}`);
+  if (c.todo && c.todo !== breve) righe.push('', `✅ *Cosa fare:* ${c.todo}`);
   righe.push('', `🔗 ${c.url}`);
   return righe.join('\n');
 }
@@ -492,10 +530,10 @@ function nextDay(d) { const x = asDate(d); x.setDate(x.getDate() + 1); return x.
 
 function calendarButtons(c) {
   const rows = [];
-  if (c.when) rows.push(['data', c.deadline ? 'Aggiungi la data al calendario' : 'Aggiungi al calendario']);
-  if (c.deadline) rows.push(['scadenza', 'Aggiungi la scadenza al calendario']);
+  if (evDate(c) && !ended(c)) rows.push(['data', c.deadline ? 'Aggiungi la data al calendario' : 'Aggiungi al calendario']);
+  if (c.deadline && daysFrom(c.deadline) >= 0) rows.push(['scadenza', 'Aggiungi la scadenza al calendario']);
   if (!rows.length) return '';
-  const extra = !isIOS ? `<a class="link-btn" href="/api/ics?id=${encodeURIComponent(c.id)}&tipo=${c.deadline ? 'scadenza' : 'data'}">Scarica il file per Outlook o Samsung Calendar</a>` : '';
+  const extra = !isIOS ? `<a class="link-btn" href="/api/ics?id=${encodeURIComponent(c.id)}&tipo=${rows[0][0]}&classe=${encodeURIComponent(normClass(state.profile?.classe))}">Scarica il file per Outlook o Samsung Calendar</a>` : '';
   return `<div class="cal">${rows.map(([kind, label]) =>
     `<button class="secondary cal-btn" data-cal="${esc(c.id)}" data-kind="${kind}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4M12 13v5M9.5 15.5h5"/></svg>${esc(label)}</button>`).join('')}${extra}</div>`;
 }
@@ -503,12 +541,17 @@ function calendarButtons(c) {
 function addToCalendar(id, kind) {
   const c = state.items.find((x) => x.id === id);
   if (!c) return;
-  if (isIOS) { location.href = `/api/ics?id=${encodeURIComponent(id)}&tipo=${kind}`; return; }
-  const day = kind === 'scadenza' ? c.deadline : c.when;
+  const classe = encodeURIComponent(normClass(classInfoFor(c, state.profile || {})?.classe || state.profile?.classe));
+  if (isIOS) { location.href = `/api/ics?id=${encodeURIComponent(id)}&tipo=${kind}&classe=${classe}`; return; }
+  const day = kind === 'scadenza' ? c.deadline : evDate(c);
+  const t = kind === 'data' ? evTime(c) : null;
+  const end1h = (x) => { const [h, m] = x.split(':').map(Number); return `${String(Math.min(h + 1, 23)).padStart(2, '0')}${String(m).padStart(2, '0')}`; };
+  const dates = t ? `${ymd(day)}T${t.start.replace(':', '')}00/${ymd(day)}T${(t.end ? t.end.replace(':', '') : end1h(t.start))}00` : `${ymd(day)}/${ymd(nextDay(day))}`;
   const text = kind === 'scadenza' ? `Scadenza: ${c.title}` : c.title;
   const details = `Circolare n. ${c.n}\n${shortText(c, 500)}\n\n${c.url}`;
   const url = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
-    + `&text=${encodeURIComponent(text)}&dates=${ymd(day)}/${ymd(nextDay(day))}&details=${encodeURIComponent(details)}`;
+    + `&text=${encodeURIComponent(text)}&dates=${dates}&ctz=Europe/Rome&details=${encodeURIComponent(details)}`
+    + (c.where && kind === 'data' ? `&location=${encodeURIComponent(c.where)}` : '');
   window.open(url, '_blank', 'noopener');
 }
 

@@ -94,11 +94,12 @@ export function isForMe(c, profile) {
 /** Decide se inviare una notifica push per questa circolare. */
 export function shouldNotify(c, profile) {
   const r = relevance(c, profile);
-  if (r === 'docenti' || r === 'altri') return Boolean(profile?.mostraDocenti && r === 'docenti' && c.level === 'urgente');
+  if (r === 'docenti' || r === 'altri') return Boolean(profile?.mostraDocenti && r === 'docenti' && effectiveLevel(c, profile) === 'urgente');
   if (r === 'forse' && profile?.includiForse === false) return false;
 
+  if (isConcluded(c, profile)) return false;
   const soglia = LIVELLI[profile?.soglia || 'normale'] ?? 0;
-  if ((LIVELLI[c.level] ?? 0) >= soglia) return true;
+  if ((LIVELLI[effectiveLevel(c, profile)] ?? 0) >= soglia) return true;
 
   const interessi = profile?.interessi || [];
   return (c.tags || []).some((tag) => interessi.includes(tag));
@@ -122,4 +123,70 @@ export function targetLabel(c, profile) {
   if (t.classes?.length) parti.push(t.classes.slice(0, 4).join(', '));
   const s = parti.join(' e ') || 'Altre classi';
   return r === 'forse' ? s + ' (forse)' : s;
+}
+
+/* ---------- Tempo: urgenza che cambia con i giorni ---------- */
+
+/** Data di oggi a Roma, "AAAA-MM-GG" (uguale su telefono e server). */
+export function todayRome(d = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Rome' }).format(d);
+}
+
+const dayDiff = (a, b) => Math.round((Date.parse(a + 'T12:00:00Z') - Date.parse(b + 'T12:00:00Z')) / 864e5);
+
+/** Informazioni specifiche per la classe dell'utente (es. il suo consiglio di classe). */
+export function classInfoFor(c, profile) {
+  if (!c.classInfo) return null;
+  for (const p of profileClasses(profile)) {
+    const k = normClass(p.classe);
+    const hit = c.classInfo[k] || Object.entries(c.classInfo).find(([code]) => k.startsWith(code) && code.length >= 2)?.[1];
+    if (hit) return { classe: k, ...hit };
+  }
+  return null;
+}
+
+/** Quando succede per questo utente: la data della sua classe se c'è, altrimenti quella generale. */
+export function eventDate(c, profile) {
+  return classInfoFor(c, profile)?.d || c.when || null;
+}
+
+export function eventTime(c, profile) {
+  const info = classInfoFor(c, profile);
+  return (info?.d ? info.t : null) || c.whenTime || null;
+}
+
+const DISRUPTIVE_RE = /sciopero|sospensione|uscita anticipata|entrata posticipata|chiusura|cambio di orario|emergenza/i;
+const ACTION_RE = /firma|modulo|pagamento|scadenza/i;
+const isDisruptive = (c) => c.disruptive ?? (c.reasons || []).some((r) => DISRUPTIVE_RE.test(r));
+const isAction = (c) => c.action ?? (c.reasons || []).some((r) => ACTION_RE.test(r));
+
+/** Conclusa: tutte le date (evento e scadenza) sono passate. */
+export function isConcluded(c, profile, today = todayRome()) {
+  const dates = [eventDate(c, profile), c.deadline].filter(Boolean);
+  return dates.length > 0 && dates.every((d) => d < today);
+}
+
+/**
+ * Livello di oggi. Urgente: cambia la giornata (sciopero, uscite...) nei prossimi 3 giorni,
+ * oppure una scadenza entro 2 giorni. Importante: cose da fare o eventi rilevanti entro 10 giorni.
+ * Quando la data è passata torna normale.
+ */
+export function effectiveLevel(c, profile, today = todayRome()) {
+  if (isConcluded(c, profile, today)) return 'normale';
+  const ev = eventDate(c, profile);
+  const future = [ev, c.deadline].filter((d) => d && d >= today).sort();
+  const next = future.length ? dayDiff(future[0], today) : null;
+  const age = c.date ? dayDiff(c.date, today) : 0; // negativo: giorni fa
+  const dl = c.deadline && c.deadline >= today ? dayDiff(c.deadline, today) : null;
+
+  if (isDisruptive(c)) {
+    if (next !== null) return next <= 3 ? 'urgente' : 'importante';
+    return age >= -3 ? 'urgente' : age >= -10 ? 'importante' : 'normale';
+  }
+  if (isAction(c) && dl !== null && dl <= 2) return 'urgente';
+  if ((c.score ?? 0) >= 4 || isAction(c)) {
+    if (next !== null) return next <= 10 ? 'importante' : 'normale';
+    return age >= -7 ? 'importante' : 'normale';
+  }
+  return 'normale';
 }

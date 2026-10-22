@@ -137,3 +137,28 @@ assert.equal(relevance(conId, { classe: '2ASA', perMe: ['c77'] }), 'tua');
 assert.equal(relevance(conId, { classe: '1B', nonPerMe: ['c77'] }), 'altri');
 assert.equal(shouldNotify({ ...conId, level: 'importante' }, { classe: '4A', altreClassi: ['1C'] }), true);
 console.log('✓ più classi e correzioni');
+
+// Urgenza nel tempo, orari, luoghi, cosa fare, date per classe
+import { effectiveLevel, isConcluded, eventDate, eventTime } from '../public/match.js';
+import { findTime, findPlace, findTodo } from '../lib/classify.mjs';
+import { romeToUtc } from '../lib/ics.mjs';
+const spagnolo = classify({ title: 'Iscrizione corsi extracurricolari di lingua spagnola – RETTIFICA', text: 'Gli studenti interessati dovranno compilare il modulo entro il 20 ottobre 2026.', tipologie: ['Circolari per alunni e famiglie'], date: '2026-10-13' });
+assert.equal(effectiveLevel(spagnolo, io, '2026-10-13'), 'importante');
+assert.equal(effectiveLevel(spagnolo, io, '2026-10-19'), 'urgente', 'scadenza a un giorno');
+assert.equal(effectiveLevel(spagnolo, io, '2026-10-22'), 'normale', 'scadenza passata');
+assert.equal(isConcluded(spagnolo, io, '2026-10-22'), true);
+assert.equal(effectiveLevel(sciopero, io, '2026-10-22'), 'urgente');
+assert.equal(effectiveLevel(sciopero, io, '2026-10-24'), 'normale', 'sciopero passato');
+assert.ok(spagnolo.todo.startsWith('Gli studenti interessati dovranno compilare'));
+const asm = classify({ title: 'Assemblea studentesca d’Istituto', text: 'Oggetto: Assemblea studentesca d’Istituto. Martedì 27 ottobre 2026, dalle ore 8.55 alle ore 10.45 si terrà in Auditorium l’Assemblea.', tipologie: ['Circolari per alunni e famiglie'], date: '2026-10-21' });
+assert.deepEqual(asm.whenTime, { start: '08:55', end: '10:45' });
+assert.equal(asm.where, 'Auditorium');
+assert.equal(excerpt('Oggetto: Assemblea studentesca d’Istituto. Martedì 27 ottobre si terrà.', 420, 'Assemblea studentesca d’Istituto'), 'Martedì 27 ottobre si terrà.');
+const cdc2 = classify({ title: 'Consigli di classe aperti', text: 'Calendario: 1A 03/11/2026 ore 14.30-15.30; 2ASA 04/11/2026 ore 15.00-16.00; 3B 05/11/2026 ore 14.30-15.30.', tipologie: ['Circolari per alunni e famiglie'], date: '2026-10-13' });
+assert.equal(eventDate(cdc2, { classe: '2ASA' }), '2026-11-04');
+assert.deepEqual(eventTime(cdc2, { classe: '2ASA' }), { start: '15:00', end: '16:00' });
+assert.equal(eventDate(cdc2, { classe: '1A' }), '2026-11-03');
+assert.equal(romeToUtc('2026-10-27', '08:55'), '20261027T075500Z'); // ora solare dal 25 ottobre
+assert.equal(romeToUtc('2026-10-20', '08:55'), '20261020T065500Z'); // ora legale
+assert.deepEqual(findYears('alunni delle classi i e ii'), [1, 2]);
+console.log('✓ urgenza nel tempo, orari, luoghi, date per classe');

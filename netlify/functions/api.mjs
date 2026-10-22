@@ -5,11 +5,12 @@ import { runCheck } from '../../lib/core.mjs';
 import { send, vapidKeys } from '../../lib/push.mjs';
 import { SITE } from '../../lib/source.mjs';
 import { buildIcs } from '../../lib/ics.mjs';
+import { eventDate, eventTime } from '../../public/match.js';
 
 const json = (data, status = 200, extra = {}) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...extra } });
 
-const PUBLIC_FIELDS = ['id', 'url', 'n', 'title', 'date', 'tipologie', 'targets', 'level', 'score', 'reasons', 'deadline', 'when', 'tags', 'excerpt', 'summary', 'pdfs', 'detailDone', 'archived'];
+const PUBLIC_FIELDS = ['id', 'url', 'n', 'title', 'date', 'tipologie', 'targets', 'level', 'score', 'reasons', 'deadline', 'when', 'tags', 'excerpt', 'summary', 'pdfs', 'detailDone', 'archived', 'whenTime', 'where', 'todo', 'classInfo', 'disruptive', 'action'];
 
 const ids = (a) => (Array.isArray(a) ? a.filter((x) => typeof x === 'string' && x.length < 120).slice(-150) : []);
 
@@ -128,8 +129,10 @@ export default async (req) => {
       const index = await loadIndex();
       const c = index.items.find((x) => x.id === url.searchParams.get('id'));
       const tipo = url.searchParams.get('tipo') === 'scadenza' ? 'scadenza' : 'data';
-      if (!c || !(tipo === 'scadenza' ? c.deadline : c.when)) return json({ error: 'Questa circolare non ha una data da aggiungere.' }, 404);
-      return new Response(buildIcs(c, tipo), {
+      const prof = { classe: url.searchParams.get('classe') || '' };
+      const ev = c && { ...c, when: eventDate(c, prof), whenTime: eventTime(c, prof) };
+      if (!ev || !(tipo === 'scadenza' ? ev.deadline : ev.when)) return json({ error: 'Questa circolare non ha una data da aggiungere.' }, 404);
+      return new Response(buildIcs(ev, tipo), {
         headers: {
           'content-type': 'text/calendar; charset=utf-8',
           'content-disposition': `inline; filename="circolare-${c.n}-${tipo}.ics"`,
