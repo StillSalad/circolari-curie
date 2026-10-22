@@ -162,3 +162,14 @@ assert.equal(romeToUtc('2026-10-27', '08:55'), '20261027T075500Z'); // ora solar
 assert.equal(romeToUtc('2026-10-20', '08:55'), '20261020T065500Z'); // ora legale
 assert.deepEqual(findYears('alunni delle classi i e ii'), [1, 2]);
 console.log('✓ urgenza nel tempo, orari, luoghi, date per classe');
+
+// Non disturbare
+import { isNight } from '../lib/push.mjs';
+assert.equal(isNight(new Date('2026-10-22T21:30:00Z')), true);  // 23:30 a Roma
+assert.equal(isNight(new Date('2026-10-22T05:30:00Z')), false); // 7:30 a Roma
+assert.equal(isNight(new Date('2026-11-10T05:30:00Z')), true);  // 6:30 a Roma (ora solare)
+console.log('✓ non disturbare');
+const ricevimento = classify({ title: 'Orario ricevimento parenti dal 12/10/2026', text: 'Si comunica che a partire dal 12/10/2026 i docenti ricevono i genitori secondo il calendario.', tipologie: ['Circolari per alunni e famiglie'], date: '2026-10-08' });
+assert.equal(ricevimento.when, null);
+assert.equal(isConcluded(ricevimento, io, '2026-10-22'), false);
+console.log('✓ date di inizio ("dal ...")');

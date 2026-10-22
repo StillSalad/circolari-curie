@@ -10,6 +10,8 @@ const state = {
   profile: store.get('cc-profile', null),
   read: new Set(store.get('cc-letti', [])),
   done: new Set(store.get('cc-fatti', [])),
+  stars: new Set(store.get('cc-preferiti', [])),
+  archive: { stato: '', mese: '' },
   items: [],
   updatedAt: null,
   filter: 'mine',
@@ -27,7 +29,7 @@ const asDate = (s) => (s ? new Date(s + 'T12:00:00') : null);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // Da leggere: solo le circolari recenti, non quelle recuperate dall'archivio
-const isUnread = (c) => !state.read.has(c.id) && !c.archived && (daysFrom(c.date) ?? 0) >= -14;
+const isUnread = (c) => !state.read.has(c.id) && !c.archived && (daysFrom(c.date) ?? 0) >= -14 && !isConcluded(c, state.profile || {});
 // Da fare: ha una scadenza o chiede firme, moduli, pagamenti
 const needsAction = (c) => Boolean(c.deadline) || (c.reasons || []).some((r) => /firma|modulo|pagamento/i.test(r));
 // Livello e date "di oggi", calcolati per il profilo (stessa logica del server)
@@ -80,20 +82,82 @@ async function load() {
   openFromUrl();
 }
 
+// In home: quello che serve ancora. Le altre restano in "Tutte" (archivio).
+const nextDate = (c) => [evDate(c), c.deadline].filter((d) => d && daysFrom(d) >= 0).sort()[0] || null;
+const hasDates = (c) => Boolean(evDate(c) || c.deadline);
+function isCurrent(c) {
+  if (state.stars.has(c.id)) return true;
+  if (hasDates(c)) return !ended(c);
+  return (daysFrom(c.date) ?? 0) >= -14 && !c.archived;
+}
+
+function inArchiveFilters(c) {
+  const st = state.archive.stato;
+  if (st === 'corso' && !isCurrent(c)) return false;
+  if (st === 'concluse' && !ended(c)) return false;
+  if (st === 'fare' && !isTodo(c)) return false;
+  if (st === 'salvate' && !state.stars.has(c.id)) return false;
+  if (state.archive.mese && (c.date || '').slice(0, 7) !== state.archive.mese) return false;
+  return true;
+}
+
 function visibleItems() {
   const p = state.profile || {};
   const q = state.q.trim().toLowerCase();
-  return state.items.filter((c) => {
+  const out = state.items.filter((c) => {
     const r = relevance(c, p);
-    if (state.filter === 'mine' && !isForMe(c, p) && !(p.mostraDocenti && r === 'docenti')) return false;
-    if (state.filter === 'urgent' && (lvl(c) === 'normale' || !(isForMe(c, p) || (p.mostraDocenti && r === 'docenti')))) return false;
-    if (state.filter === 'all' && r === 'docenti' && !p.mostraDocenti && !q) return false;
+    const mine = isForMe(c, p) || (p.mostraDocenti && r === 'docenti') || state.stars.has(c.id);
+    if (state.filter === 'mine' && (!mine || (!q && !isCurrent(c)))) return false;
+    if (state.filter === 'urgent' && (!mine || !isCurrent(c) || lvl(c) === 'normale')) return false;
+    if (state.filter === 'all') {
+      if (r === 'docenti' && !p.mostraDocenti && !q) return false;
+      if (!inArchiveFilters(c)) return false;
+    }
     if (q) {
-      const hay = [c.title, c.excerpt, c.summary, 'n. ' + c.n, c.n].join(' ').toLowerCase();
+      const hay = [c.title, c.excerpt, c.summary, c.todo, c.where, 'n. ' + c.n, c.n].join(' ').toLowerCase();
       if (!q.split(/\s+/).every((w) => hay.includes(w))) return false;
     }
     return true;
   });
+  if (state.filter === 'all' || q) return out.sort((x, y) => (y.date || '').localeCompare(x.date || '') || (y.n || 0) - (x.n || 0));
+  // Home: prima ciò che succede presto (ordinato per data), poi le nuove senza data, poi le salvate
+  const rank = (c) => (nextDate(c) ? 0 : state.stars.has(c.id) && hasDates(c) ? 2 : 1);
+  return out.sort((x, y) => rank(x) - rank(y)
+    || (rank(x) === 0 ? nextDate(x).localeCompare(nextDate(y)) : (y.date || '').localeCompare(x.date || '')));
+}
+
+const fmtMonth = new Intl.DateTimeFormat('it-IT', { month: 'long', year: 'numeric' });
+
+function groupFor(c) {
+  if (state.filter !== 'all' && !state.q) {
+    const nd = nextDate(c);
+    if (nd) {
+      const n = daysFrom(nd);
+      return n <= 1 ? 'Oggi e domani' : n <= 7 ? 'Questa settimana' : 'Più avanti';
+    }
+    return state.stars.has(c.id) && hasDates(c) ? 'Salvate' : 'Nuove';
+  }
+  const n = daysFrom(c.date);
+  if (n === null) return 'Senza data';
+  if (n >= 0) return 'Oggi';
+  if (n === -1) return 'Ieri';
+  if (n > -7) return 'Questa settimana';
+  const m = fmtMonth.format(asDate(c.date));
+  return m.charAt(0).toUpperCase() + m.slice(1);
+}
+
+function renderArchiveBar() {
+  const bar = $('#archive-bar');
+  bar.hidden = state.filter !== 'all';
+  if (bar.hidden) return;
+  const stati = [['', 'Tutte'], ['corso', 'In corso'], ['concluse', 'Concluse'], ['fare', 'Da fare'], ['salvate', 'Salvate ★']];
+  const mesi = [...new Set(state.items.map((c) => (c.date || '').slice(0, 7)).filter(Boolean))].sort().reverse();
+  const chip = (kind, val, label, on) => `<button class="chip${on ? ' on' : ''}" data-arch="${kind}" data-val="${val}" aria-pressed="${on}">${label}</button>`;
+  bar.innerHTML = `<div class="chip-row" role="group" aria-label="Stato">${stati.map(([v, l]) => chip('stato', v, l, state.archive.stato === v)).join('')}</div>
+    <div class="chip-row" role="group" aria-label="Mese">${chip('mese', '', 'Tutto l’anno', !state.archive.mese)}${mesi.map((m) => {
+      const l = new Intl.DateTimeFormat('it-IT', { month: 'long' }).format(asDate(m + '-15'));
+      return chip('mese', m, l.charAt(0).toUpperCase() + l.slice(1), state.archive.mese === m);
+    }).join('')}</div>`;
 }
 
 /* ---------- Render ---------- */
@@ -101,7 +165,7 @@ function visibleItems() {
 function renderToday() {
   const p = state.profile || {};
   const cls = normClass(p.classe);
-  const mine = state.items.filter((c) => isForMe(c, p));
+  const mine = state.items.filter((c) => isForMe(c, p) && isCurrent(c));
   const urgent = mine.filter((c) => lvl(c) === 'urgente' && (isUnread(c) || !state.read.has(c.id)));
   const unread = mine.filter(isUnread);
   const todo = mine.filter(isTodo);
@@ -128,20 +192,11 @@ function renderToday() {
   updateBadge(unread.length);
 }
 
-function groupName(dateStr) {
-  const n = daysFrom(dateStr);
-  if (n === null) return 'Senza data';
-  if (n >= 0) return 'Oggi';
-  if (n === -1) return 'Ieri';
-  if (n > -7) return 'Questa settimana';
-  if (n > -31) return 'Questo mese';
-  return 'Prima';
-}
-
 function renderList() {
   const list = $('#list');
   const p = state.profile || {};
   list.innerHTML = '';
+  renderArchiveBar();
 
   if (!state.items.length && !state.error) {
     list.innerHTML = '<li class="skeleton"></li>'.repeat(5);
@@ -154,7 +209,9 @@ function renderList() {
       ? ['Nessun risultato', `Nessuna circolare contiene “${esc(state.q)}”.`, 'Cerca in tutte', 'all']
       : state.filter === 'urgent'
         ? ['Niente di importante', 'Al momento nessuna circolare importante ti riguarda.', 'Vedi tutte le tue', 'mine']
-        : ['Nessuna circolare per te', 'Non ci sono circolari per la tua classe. Prova a vederle tutte.', 'Vedi tutte', 'all'];
+        : state.filter === 'all'
+          ? ['Nessuna circolare', 'Nessuna circolare corrisponde a questi filtri.', 'Togli i filtri', 'reset']
+          : ['Sei in pari', 'Nessuna circolare in corso per la tua classe. Le passate sono nell’archivio.', 'Apri l’archivio', 'all'];
     list.innerHTML = `<li class="empty"><img src="/img/empty.svg" alt=""><strong>${msg[0]}</strong>${msg[1]}<br><button class="secondary" data-filter-go="${msg[3]}">${msg[2]}</button></li>`;
     return;
   }
@@ -162,7 +219,7 @@ function renderList() {
   const tpl = $('#tpl-item');
   let lastGroup = '';
   for (const c of items) {
-    const g = groupName(c.date);
+    const g = groupFor(c);
     if (g !== lastGroup) {
       const h = document.createElement('li');
       h.className = 'group'; h.textContent = g; h.setAttribute('aria-hidden', 'true');
@@ -179,7 +236,7 @@ function renderList() {
     $('.n', li).textContent = c.n ?? '–';
     $('.d', li).textContent = c.date ? fmtShort.format(asDate(c.date)) : '';
     if (c.date) $('.d', li).dateTime = c.date;
-    $('.title', li).textContent = c.title;
+    $('.title', li).textContent = (state.stars.has(c.id) ? '★ ' : '') + c.title;
 
     const tags = [];
     const ev = evDate(c);
@@ -206,7 +263,7 @@ function renderList() {
 
 function renderFoot() {
   const t = state.updatedAt ? new Date(state.updatedAt) : null;
-  $('#foot').textContent = t
+  $('#foot-text').textContent = t
     ? `Aggiornato ${daysFrom(t.toISOString().slice(0, 10)) === 0 ? 'oggi' : fmtShort.format(t)} alle ${fmtTime.format(t)}. Controllo il sito della scuola ogni 20 minuti.`
     : '';
 }
@@ -251,6 +308,7 @@ function openDetail(id) {
   $('#d-body').innerHTML = `
     <p class="d-num"><b>n. ${esc(c.n)}</b> pubblicata ${c.date ? fmtLong.format(asDate(c.date)) : ''}</p>
     <h2 id="d-title">${esc(c.title)}</h2>
+    <button class="star-btn${state.stars.has(c.id) ? ' on' : ''}" data-star="${esc(c.id)}" aria-pressed="${state.stars.has(c.id)}">${state.stars.has(c.id) ? '★ Salvata: resta nella home' : '☆ Salva: tienila nella home'}</button>
     ${finished ? `<p class="ended-banner">Conclusa: la data indicata è passata. La trovi qui per consultarla.</p>` : countdown}
     ${levelTxt && c.reasons?.length ? `<div class="why ${L}"><h3>${levelTxt}</h3><ul>${c.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul></div>` : ''}
     ${info ? `<div class="for-class"><h3>Per la ${esc(info.classe)}</h3><p>${esc(info.s)}</p></div>` : ''}
@@ -403,6 +461,32 @@ function openFromUrl(href = location.href) {
   const id = new URL(href).searchParams.get('c');
   if (id && state.items.some((c) => c.id === id)) openDetail(id);
 }
+
+/* ---------- Preferiti e inviti ---------- */
+
+function toggleStar(id) {
+  state.stars.has(id) ? state.stars.delete(id) : state.stars.add(id);
+  store.set('cc-preferiti', [...state.stars].slice(-200));
+  toast(state.stars.has(id) ? 'Salvata: la trovi sempre nella home' : 'Tolta dalle salvate');
+  openDetail(id);
+}
+
+function inviteText() {
+  return `Ti consiglio Circolari Curie: le circolari del Curie filtrate per la tua classe, con l’avviso quando esce qualcosa di importante e il calendario delle scadenze. Aprila qui: ${location.origin}`;
+}
+
+function openInvite() {
+  $('#invite-link').textContent = location.origin.replace(/^https?:\/\//, '');
+  $('#invite-qr').src = '/api/qr';
+  $('#invite').showModal();
+}
+
+$('#invite-share').addEventListener('click', async () => {
+  const text = inviteText();
+  if (navigator.share) { try { await navigator.share({ title: 'Circolari Curie', text }); } catch {} }
+  else location.href = 'https://wa.me/?text=' + encodeURIComponent(text);
+});
+$('#invite-copy').addEventListener('click', async () => toast((await copyText(inviteText())) ? 'Messaggio copiato' : 'Non riesco a copiare'));
 
 /* ---------- Fatto e segnalazioni ---------- */
 
@@ -643,6 +727,7 @@ function fillProfileForm() {
   f.includiForse.checked = p.includiForse !== false;
   f.mostraDocenti.checked = Boolean(p.mostraDocenti);
   f.promemoria.checked = Boolean(p.promemoria);
+  f.notte.checked = Boolean(p.notte);
   f.altreClassi.value = (p.altreClassi || []).join(', ');
   f.riepilogo.checked = Boolean(p.riepilogo);
   renderNotifyBox();
@@ -662,6 +747,7 @@ function readProfileForm() {
     mostraDocenti: f.mostraDocenti.checked,
     promemoria: f.promemoria.checked,
     riepilogo: f.riepilogo.checked,
+    notte: f.notte.checked,
     altreClassi: [...new Set(f.altreClassi.value.split(/[\s,;]+/).map(normClass).filter((k) => /^[1-5][A-Z]{1,4}$/.test(k)))].slice(0, 6),
     perMe: state.profile?.perMe || [],
     nonPerMe: state.profile?.nonPerMe || [],
@@ -778,6 +864,11 @@ document.addEventListener('click', (e) => {
     if (push.dataset.push === 'off') return disablePush();
     if (push.dataset.push === 'test') return testPush();
   }
+  const arch = e.target.closest('[data-arch]');
+  if (arch) { state.archive[arch.dataset.arch] = arch.dataset.val; return renderList(); }
+  const star = e.target.closest('[data-star]');
+  if (star) return toggleStar(star.dataset.star);
+  if (e.target.closest('[data-invite]')) return openInvite();
   const done = e.target.closest('[data-done]');
   if (done) return toggleDone(done.dataset.done);
   const rep = e.target.closest('[data-report]');
@@ -799,7 +890,7 @@ document.addEventListener('click', (e) => {
   const seg = e.target.closest('.seg [data-filter]');
   if (seg) return setFilter(seg.dataset.filter);
   const go = e.target.closest('[data-filter-go]');
-  if (go) { if (state.q && go.dataset.filterGo === 'all') { /* mantiene la ricerca */ } return setFilter(go.dataset.filterGo); }
+  if (go) { if (go.dataset.filterGo === 'reset') { state.archive = { stato: '', mese: '' }; return renderList(); } return setFilter(go.dataset.filterGo); }
   const close = e.target.closest('[data-close]');
   if (close) close.closest('dialog').close();
 });

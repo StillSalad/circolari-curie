@@ -45,8 +45,9 @@
       </label>
     </div>
 
+    <div class="archive-bar" id="archive-bar" hidden></div>
     <ol class="list" id="list" aria-label="Circolari"></ol>
-    <p class="foot" id="foot"></p>
+    <p class="foot" id="foot"><span id="foot-text"></span><br><button class="link-btn" data-invite>Invita i compagni</button></p>
   </main>
 
 
@@ -116,6 +117,7 @@
         <legend>Avvisi in più</legend>
         <label class="row"><input type="checkbox" name="promemoria"> <span><b>Promemoria scadenze:</b> il giorno prima di una scadenza ti ricordo cosa consegnare</span></label>
         <label class="row"><input type="checkbox" name="riepilogo"> <span><b>Riepilogo della sera:</b> alle 19, se domani cambia qualcosa (sciopero, uscite, assemblee), ti mando un riassunto</span></label>
+        <label class="row"><input type="checkbox" name="notte"> <span><b>Non disturbare di notte:</b> dalle 22 alle 7 niente notifiche, quelle arrivate te le riassumo al mattino</span></label>
       </fieldset>
 
       <fieldset>
@@ -131,6 +133,7 @@
 
       <button class="primary" id="save-profile" type="submit">Salva</button>
       <button class="link-btn tour-again" type="button" id="tour-again">Rivedi il tutorial</button>
+      <button class="link-btn tour-again" type="button" data-invite>Invita i compagni</button>
       <div id="admin-box" class="admin-box"></div>
       <p class="credits">App non ufficiale, non collegata al Liceo. Fa fede sempre il sito della scuola.</p>
     </form>
@@ -193,7 +196,7 @@
         <h2 tabindex="-1">Come si usa</h2>
         <dl class="tips">
           <dt>Per me, Importanti, Tutte</dt>
-          <dd>In alto scegli cosa vedere. “Per me” mostra solo le circolari della tua classe e quelle per tutta la scuola.</dd>
+          <dd>“Per me” mostra solo quello che ti serve adesso: le circolari della tua classe con una data ancora da venire e le novità delle ultime due settimane. Tutto il resto è in “Tutte”, l’archivio, con i filtri per mese e stato. Con la stellina ☆ tieni una circolare sempre in home.</dd>
           <dt>Rosso vuol dire urgente</dt>
           <dd>Scioperi, uscite anticipate, scadenze vicine. Aprendo la circolare vedi il perché.</dd>
           <dt>Inoltra alla classe</dt>
@@ -224,6 +227,23 @@
         <li><span class="ios-ico"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M12 8.5v7M8.5 12h7"/></svg></span><div>Scorri e scegli <b>Aggiungi alla schermata Home</b>, poi tocca <b>Aggiungi</b>.</div></li>
         <li><span class="ios-ico"><img src="/icons/icon-192.png" alt="" width="40" height="40"></span><div>Apri <b>Circolari</b> dalla schermata Home e attiva le notifiche dal profilo.</div></li>
       </ol>
+    </div>
+  </dialog>
+
+  <!-- Invita i compagni -->
+  <dialog class="sheet invite" id="invite" aria-labelledby="inv-title">
+    <div class="sheet-inner">
+      <button class="back" data-close>Chiudi</button>
+      <h2 id="inv-title" class="sheet-title">Invita i compagni</h2>
+      <p class="hint">Fai inquadrare il codice con la fotocamera, oppure manda il messaggio nel gruppo della classe.</p>
+      <div class="qr-card">
+        <img id="invite-qr" alt="Codice QR per aprire Circolari Curie" width="240" height="240">
+        <p id="invite-link" class="qr-link"></p>
+      </div>
+      <div class="actions">
+        <button class="primary" id="invite-share" type="button">Manda il messaggio con il link</button>
+        <button class="secondary" id="invite-copy" type="button">Copia il messaggio</button>
+      </div>
     </div>
   </dialog>
 

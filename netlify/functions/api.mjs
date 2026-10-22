@@ -5,6 +5,7 @@ import { runCheck } from '../../lib/core.mjs';
 import { send, vapidKeys } from '../../lib/push.mjs';
 import { SITE } from '../../lib/source.mjs';
 import { buildIcs } from '../../lib/ics.mjs';
+import QRCode from 'qrcode';
 import { eventDate, eventTime } from '../../public/match.js';
 
 const json = (data, status = 200, extra = {}) =>
@@ -25,6 +26,7 @@ function cleanProfile(p = {}) {
     mostraDocenti: Boolean(p.mostraDocenti),
     promemoria: Boolean(p.promemoria),
     riepilogo: Boolean(p.riepilogo),
+    notte: Boolean(p.notte),
     altreClassi: Array.isArray(p.altreClassi)
       ? p.altreClassi.map((k) => String(k).toUpperCase().replace(/[^0-9A-Z]/g, '')).filter((k) => /^[1-5][A-Z]{1,4}$/.test(k)).slice(0, 6)
       : [],
@@ -78,6 +80,12 @@ export default async (req) => {
         url: '/',
       });
       return json(r, r.ok ? 200 : 502);
+    }
+
+    if (route === 'qr' && req.method === 'GET') {
+      // QR code con l'indirizzo dell'app (quello da cui è stato aperto)
+      const svg = await QRCode.toString(url.origin, { type: 'svg', margin: 1, errorCorrectionLevel: 'M', color: { dark: '#123D70', light: '#ffffff' } });
+      return new Response(svg, { headers: { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' } });
     }
 
     if (route === 'report' && req.method === 'POST') {
