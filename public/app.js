@@ -14,7 +14,10 @@ const state = {
   filter: 'mine',
   q: '',
   error: null,
+  openId: null,
 };
+
+const desktop = matchMedia('(min-width: 1000px)');
 
 const fmtShort = new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short' });
 const fmtLong = new Intl.DateTimeFormat('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -148,6 +151,7 @@ function renderList() {
     const li = tpl.content.firstElementChild.cloneNode(true);
     const r = relevance(c, p);
     li.dataset.id = c.id;
+    if (c.id === state.openId) { li.classList.add('active'); $('.item-btn', li).setAttribute('aria-current', 'true'); }
     if (state.read.has(c.id)) li.classList.add('read');
     if (c.level === 'urgente' && r !== 'docenti') li.classList.add('urgente');
     $('.n', li).textContent = c.n ?? '–';
@@ -226,7 +230,10 @@ function openDetail(id) {
   setupForward(c);
 
   const dlg = $('#detail');
-  if (!dlg.open) dlg.showModal();
+  state.openId = id;
+  // Su computer il dettaglio sta a destra e l'elenco resta cliccabile
+  if (dlg.open && dlg.matches(':modal') === desktop.matches) dlg.close();
+  if (!dlg.open) desktop.matches ? dlg.show() : dlg.showModal();
   dlg.scrollTop = 0;
   history.replaceState(null, '', '?c=' + encodeURIComponent(id));
   render();
@@ -496,7 +503,24 @@ document.addEventListener('click', (e) => {
   if (close) close.closest('dialog').close();
 });
 
-$('#detail').addEventListener('close', () => history.replaceState(null, '', location.pathname));
+$('#detail').addEventListener('close', () => {
+  history.replaceState(null, '', location.pathname);
+  state.openId = null;
+  renderList();
+});
+
+// Passando da telefono a computer (o ruotando il tablet) il dettaglio cambia forma
+desktop.addEventListener('change', () => {
+  const dlg = $('#detail');
+  if (!dlg.open || !state.openId) return;
+  const id = state.openId;
+  dlg.close();
+  openDetail(id);
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && desktop.matches && $('#detail').open && !$('#profile').open) $('#detail').close();
+});
 
 $('#btn-profile').addEventListener('click', () => { fillProfileForm(); $('#profile').showModal(); });
 

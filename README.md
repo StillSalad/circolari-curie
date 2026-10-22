@@ -40,5 +40,3 @@ Variabili facoltative (Site configuration, Environment variables):
 
 - Come la scuola scrive le sezioni (A, B, CSA, ...): se una circolare non viene riconosciuta come tua, aggiungi l'esempio in `test/test.mjs` e sistema `findClasses`.
 - Le parole che rendono una circolare urgente sono in `REGOLE_PRIORITA` dentro `lib/classify.mjs`.
-
-Creata da LolloMarta.

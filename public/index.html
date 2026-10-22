@@ -48,10 +48,16 @@
     <p class="foot" id="foot"></p>
   </main>
 
+  <!-- Su computer: spazio a destra quando nessuna circolare è aperta -->
+  <aside class="placeholder" aria-hidden="true">
+    <img src="/img/empty.svg" alt="" width="120" height="120">
+    <p>Scegli una circolare dall’elenco per leggerla qui.</p>
+  </aside>
+
   <!-- Dettaglio circolare -->
   <dialog class="sheet" id="detail" aria-labelledby="d-title">
     <div class="sheet-inner">
-      <button class="back" data-close>Indietro</button>
+      <button class="back" data-close><span class="only-mobile">Indietro</span><span class="only-desktop">Chiudi</span></button>
       <article id="d-body"></article>
     </div>
   </dialog>
@@ -61,7 +67,7 @@
     <form class="sheet-inner" id="profile-form" method="dialog">
       <button class="back" type="button" data-close>Chiudi</button>
       <h2 id="p-title" class="sheet-title">La tua classe</h2>
-      <p class="hint">Serve a mostrarti prima le circolari che ti riguardano. Resta su questo telefono; al server arrivano solo classe, indirizzo e preferenze di notifica.</p>
+      <p class="hint">Serve a mostrarti prima le circolari che ti riguardano. Resta su questo dispositivo; al server arrivano solo classe, indirizzo e preferenze di notifica.</p>
 
       <fieldset>
         <legend>Anno</legend>
@@ -117,7 +123,7 @@
       </fieldset>
 
       <button class="primary" id="save-profile" type="submit">Salva</button>
-      <p class="credits">App non ufficiale, non collegata al Liceo. Fa fede sempre il sito della scuola.<br>Creata da LolloMarta.</p>
+      <p class="credits">App non ufficiale, non collegata al Liceo. Fa fede sempre il sito della scuola.</p>
     </form>
   </dialog>
 
